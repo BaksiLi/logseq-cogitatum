@@ -1,0 +1,35 @@
+{
+  "name": "@cogitatum/logseq",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "description": "Read explicit Cogitatum code blocks in Logseq.",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "node build.mjs",
+    "test:browser": "node tests/host.browser.mjs",
+    "test": "vitest run src"
+  },
+  "logseq": {
+    "id": "cogitatum",
+    "title": "Cogitatum"
+  },
+  "dependencies": {
+    "@cogitatum/core": "file:vendor/cogitatum-core-0.5.0.tgz",
+    "@cogitatum/view": "file:vendor/cogitatum-view-0.5.0.tgz"
+  },
+  "devDependencies": {
+    "@logseq/libs": "0.3.4",
+    "esbuild": "^0.28.2",
+    "playwright": "1.61.1",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "typescript": "^5.8.3",
+    "vitest": "3.2.2"
+  },
+  "main": "dist/index.html",
+  "cogitatumSource": {
+    "repository": "BaksiLi/cogitatum",
+    "ref": "5249594080fb00782d160ccf7ee0de3074174777"
+  }
+}

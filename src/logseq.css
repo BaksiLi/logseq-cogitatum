@@ -1,0 +1,21 @@
+/* Map the shared --cog-* vocabulary onto Logseq theme variables; unset host variables fall back to view defaults. */
+.cog-logseq {
+  --cog-ink: var(--ls-primary-text-color);
+  --cog-surface: var(--ls-primary-background-color);
+  --cog-canvas: var(--ls-secondary-background-color);
+  --cog-muted: var(--ls-secondary-text-color);
+  --cog-line: var(--ls-border-color);
+  --cog-focus: var(--ls-link-text-color);
+  display: block;
+  margin: .25rem 0;
+  cursor: auto;
+  user-select: text;
+}
+.cog-logseq-error {
+  margin: 0;
+  padding: .5rem .75rem;
+  border-left: 3px solid var(--ls-error-text-color, #a8553d);
+  color: var(--ls-error-text-color, #a8553d);
+  white-space: pre-wrap;
+  font: 12px/1.5 ui-monospace, Menlo, monospace;
+}

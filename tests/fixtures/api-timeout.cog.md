@@ -1,0 +1,16 @@
+- API timeout review (hypothetical incident)
+- [note] The original report (fictional)
+  - The on-call report, quoted as filed: "Pool exhaustion caused last night's timeouts. Between 02:00 and 03:00 the logs show repeated connection-acquisition failures."
+- Our reconstruction of the report's argument:
+  - [C] Connection pool exhaustion caused the timeouts.
+    - [G @acq-fail; @report-step] Between 02:00 and 03:00 the service logged repeated connection-acquisition failures.
+- Planning the fix a week later:
+  - [Q] What should change before the next release?
+    - [C] Doubling the pool size will prevent these timeouts.
+      - We reuse the same logged failures; they are not a second observation.
+      - [G use @acq-fail] The logs show the pool is too small.
+        - [O] The log export may use UTC, so those failures may not fall between 02:00 and 03:00 local time.
+        - [O/] Running out of connections does not show that a larger pool is enough; a leak would exhaust any size.
+          - [R] A leak would keep connections checked out, but all were returned once traffic fell after 03:00.
+  - [_ use @report-step] The report's own step needs the same scrutiny.
+    - [O/] Slow upstream calls would also hold connections open and produce these failures.
