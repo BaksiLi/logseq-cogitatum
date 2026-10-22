@@ -1,4 +1,4 @@
-/* The adapter themes and frames View; glyphs, relations and layout remain owned by View. */
+/* Host tokens and fenced-editor layout; the shared View owns the preview shell. */
 .cog-logseq {
   --cog-ink: var(--ls-primary-text-color, #18242a);
   --cog-surface: var(--ls-primary-background-color, #fbfcf8);
@@ -8,62 +8,16 @@
   --cog-focus: var(--ls-link-text-color, #357873);
   --cog-support: color-mix(in srgb, #357873 75%, var(--cog-ink) 25%);
   --cog-objection: color-mix(in srgb, #a8553d 75%, var(--cog-ink) 25%);
-  display: block;
-  min-width: 0;
-  margin: .4rem 0;
-  border: 1px solid var(--cog-line);
-  border-radius: 8px;
-  background: var(--cog-surface);
-  color: var(--cog-ink);
+  --cog-error: var(--ls-error-text-color, #a8553d);
   font-family: var(--ls-font-family, inherit);
-  cursor: auto;
-  user-select: text;
 }
-.cog-logseq [hidden] { display: none !important; }
-/* Reserve the top-right corner for Logseq's floating source/edit buttons. */
-.cog-logseq-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 74px 8px 10px; border-bottom: 1px solid var(--cog-line); }
-.cog-logseq-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--cog-muted); }
-.cog-logseq-modes { display: flex; gap: 2px; padding: 2px; border-radius: 5px; background: var(--cog-canvas); }
-.cog-logseq .cog-logseq-button { appearance: none; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; margin: 0; padding: 3px 8px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--cog-muted); font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1.4; cursor: pointer; }
-.cog-logseq .cog-logseq-button:hover { color: var(--cog-ink); background: color-mix(in srgb, var(--cog-ink) 6%, transparent); }
-.cog-logseq .cog-logseq-button[aria-pressed="true"] { background: var(--cog-surface); color: var(--cog-ink); box-shadow: 0 1px 3px #00000012; }
-.cog-logseq .cog-logseq-button:focus-visible { outline: 2px solid var(--cog-focus); outline-offset: 2px; }
-.cog-logseq .cog-logseq-button:disabled { opacity: .4; cursor: default; }
-.cog-logseq .cog-logseq-expand { margin-left: auto; }
-.cog-logseq .cog-logseq-issues { color: var(--ls-error-text-color, #a8553d); }
-.cog-logseq-reading { padding: 16px 10px 18px; }
-.cog-logseq-map-panel { position: relative; background: var(--cog-canvas); border-radius: 0 0 8px 8px; }
-.cog-logseq-map-toolbar { position: absolute; top: 8px; right: 10px; z-index: 1; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--cog-line); border-radius: 5px; background: var(--cog-surface); }
-.cog-logseq-map { height: 390px; background-image: radial-gradient(circle, color-mix(in srgb, var(--cog-muted) 16%, transparent) .7px, transparent .8px); background-size: 18px 18px; }
-/* Logseq disables all SVG pointer events; only the interactive Map opts back in. */
-.cog-logseq .cog-graph { pointer-events: auto; }
-.cog-logseq .cog-graph:focus { outline: none; }
-.cog-logseq .cog-graph:focus-visible { outline: 2px solid var(--cog-focus); outline-offset: -2px; }
-.cog-logseq .cog-graph[data-dragging] .cog-node { cursor: grabbing; }
-.cog-logseq-detail { display: flex; align-items: start; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--cog-line); background: var(--cog-surface); }
-.cog-logseq-detail-text { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
-.cog-logseq-detail .cog-logseq-button { flex-shrink: 0; color: var(--cog-focus); }
-.cog-logseq-hint { margin: 0; padding: 6px 12px 10px; color: var(--cog-muted); font-size: 11px; line-height: 1.5; }
-.cog-logseq-error { margin: 0; padding: 12px 16px; border-left: 3px solid var(--ls-error-text-color, #a8553d); color: var(--ls-error-text-color, #a8553d); white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, monospace; }
-.cog-logseq-dialog { width: min(1200px, calc(100vw - 48px)); max-width: none; height: min(850px, calc(100vh - 48px)); max-height: none; margin: auto; padding: 0; border: 0; border-radius: 10px; background: var(--ls-primary-background-color, #fbfcf8); box-shadow: 0 24px 100px #00000040; }
-.cog-logseq-dialog::backdrop { background: #00000066; }
-.cog-logseq[data-expanded] { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; margin: 0; }
-.cog-logseq[data-expanded] .cog-logseq-toolbar { padding-right: 10px; }
-.cog-logseq[data-expanded] .cog-logseq-body { flex: 1; min-height: 0; overflow: auto; }
-.cog-logseq[data-expanded] .cog-logseq-map-panel { display: flex; flex-direction: column; height: 100%; }
-.cog-logseq[data-expanded] .cog-logseq-map { flex: 1; min-height: 320px; height: auto; }
-/* Reflow the host's single live buffer beside its preview when the block has room. */
-.ui-fenced-code-wrap[data-cog-editing].is-active { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; align-items: start; }
+/* Reserve the corner for Logseq's native source controls. */
+.cog-logseq .cog-block-toolbar { padding-inline-end: 74px; }
+.cog-logseq[data-expanded] .cog-block-toolbar { padding-inline-end: 10px; }
+.ui-fenced-code-wrap[data-cog-editing].is-active {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 12px; align-items: start;
+}
 .ui-fenced-code-wrap[data-cog-editing] > .ui-fenced-code-editor,
 .ui-fenced-code-wrap[data-cog-editing] > .ui-fenced-code-result { min-width: 0; }
 .ui-fenced-code-wrap[data-cog-editing] > .ui-fenced-code-result { padding-top: 0; }
-@media (max-width: 600px) {
-  .cog-logseq-title { display: none; }
-  .cog-logseq-toolbar { gap: 4px; padding: 6px 70px 6px 6px; }
-  .cog-logseq-toolbar .cog-logseq-button { padding-inline: 6px; }
-  .cog-logseq-reading { padding: 12px 4px; }
-  .cog-logseq-map { height: 340px; }
-  .cog-logseq-detail { flex-wrap: wrap; gap: 4px; padding: 10px; }
-  .cog-logseq-detail-text { flex-basis: 100%; }
-  .cog-logseq-dialog { width: calc(100vw - 16px); height: calc(100vh - 16px); }
-}

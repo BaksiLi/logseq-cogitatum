@@ -8,13 +8,13 @@ It does not infer structure from ordinary outline blocks.
 ## Project boundary
 
 This standalone local project owns the Logseq adapter, its tests and its installable plugin.
-The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `0d0f73dc21859de1adc059594da21d032beab880`.
+The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `f2c89923868ceb8bd973453c395b3cd49d73eb3a`.
 The two archives in `vendor/` retain the unpublished 0.5.0 candidate; no sibling source checkout or parent workspace is required.
 Their SHA-256 checksums are:
 
 ```text
 6615a2d879e18b72ce3b8f6e3105b98908c45067b13dd510492043df49f2b215  cogitatum-core-0.5.0.tgz
-fe36ffb53a5ddf7358fcdcdfd377074b8090e71ab76b44d833c694eb42d089ae  cogitatum-view-0.5.0.tgz
+370ba49c49b496d602ec0a68975a1f3be2545a2b16e8b20cfbca015bcf6183fe  cogitatum-view-0.5.0.tgz
 ```
 
 This candidate includes bounded focus on directly related Bearings, measured label hit areas, and respects reduced motion in the shared stylesheet.
@@ -44,9 +44,13 @@ Map shows the compiled relations and supports pan, zoom, Fit and Arrange.
 Selecting a mark or its wording shows the full text; Read passage returns to the corresponding Reading occurrence.
 Drag a mark or its wording to arrange it, or drag empty space to pan.
 Arrange restores the automatic layout, with motion only when the system permits it.
-Edit alongside opens the existing native code editor beside the preview when space permits, or above it in narrow blocks.
+Edit opens the existing native code editor beside the preview when space permits, or above it in narrow blocks.
 Enter on a Reading occurrence or Map mark selects its exact source range; repeated actions reuse the same editor.
 Logseq owns the source buffer, input methods, saving and undo.
+Parallel editing enables native line wrapping for narrow columns and restores the previous setting when the preview is destroyed.
+The shared `@cogitatum/view/block` shell owns controls, diagnostics, selection, expansion and responsive preview layout.
+The adapter maps host theme tokens, isolates Logseq block events and opens its native editor.
+Source replacement and unmount cancel pending navigation; editing from Expand reattaches the preview before focusing the native editor.
 The adapter validates the live text before selecting a range and never writes source itself.
 Expand opens the same view in a larger modal; Close or Escape restores it to the note.
 Dragging gently attracts and repels unheld nodes in the connected component, including across joint Bearings.

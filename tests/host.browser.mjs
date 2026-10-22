@@ -24,14 +24,17 @@ window.logseq = { api: {}, sdk: { experiments: {
 } } };
 document.addEventListener("keydown", event => log.keys.push(event.key));
 let root;
-window.nativeEditorLog = { toggles: 0, selections: [] };
+window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [] };
 function HostFence({ opts, content }) {
   const [value, setValue] = React.useState(content), [active, setActive] = React.useState(false);
   React.useEffect(() => setValue(content), [content]);
-  const input = React.useRef(null);
+  const input = React.useRef(null), wrapping = React.useRef(false);
   return React.createElement("div", { className: "ui-fenced-code-wrap" + (active ? " is-active" : "") },
     React.createElement("div", { className: "ui-fenced-code-editor" }, React.createElement("div", { className: "CodeMirror", ref: node => {
-      if (node) node.CodeMirror = { getValue: () => input.current.value, refresh() {}, focus: () => input.current.focus(),
+      if (node && !node.CodeMirror) node.CodeMirror = {
+        getOption: () => wrapping.current,
+        setOption: (name, value) => { wrapping.current = value; window.nativeEditorLog.wrapping.push(value); },
+        getValue: () => input.current.value, refresh() {}, focus: () => input.current.focus(),
         setSelection: (from, to) => window.nativeEditorLog.selections.push({ from, to }) };
     } }, React.createElement("textarea", { ref: input, "aria-label": "Native source", value, onChange: event => setValue(event.target.value) }))),
     React.createElement("div", { className: "ui-fenced-code-result", onMouseDown: event => { if (opts.edit === false) { event.preventDefault(); event.stopPropagation(); } } },
@@ -157,12 +160,13 @@ try {
   // Selecting a reused Ground keeps direct objections to its steps visible, without following their replies.
   assert.equal(await page.locator('.cog-reading-row[data-line="16"]').getAttribute("data-related"), "true");
   assert.equal(await page.locator('.cog-reading-row[data-line="14"]').getAttribute("data-related"), "false");
-  await page.getByRole("button", { name: "Edit alongside", exact: true }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.waitForSelector('[data-cog-editing="true"]');
   assert.equal(await page.getByRole('textbox', { name: 'Native source' }).inputValue(), reading);
   assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.at(-1).from.line), 10);
-  await page.getByRole("button", { name: "Edit alongside", exact: true }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   assert.equal(await page.evaluate(() => window.nativeEditorLog.toggles), 1);
+  assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), [true], 'Native wrapping should be enabled once for parallel editing');
   await page.getByRole("button", { name: "Map", exact: true }).click();
   await frames();
   assert.equal(await page.locator('.cog-graph').evaluate(element => getComputedStyle(element).pointerEvents), 'auto', "Logseq's global SVG rule disabled the Map");
@@ -170,7 +174,7 @@ try {
   assert.equal(await mapNode.count(), 1);
   assert.equal(await page.locator('.cog-graph .point[aria-label*="Slow upstream calls"]').getAttribute("data-related"), "true");
   assert.equal(await page.locator('.cog-graph .point[aria-label*="A leak would keep"]').getAttribute("data-related"), "false");
-  assert.match(await page.locator(".cog-logseq-detail-text").textContent(), /Between 02:00 and 03:00/);
+  assert.match(await page.locator(".cog-block-detail-text").textContent(), /Between 02:00 and 03:00/);
   await page.getByRole("button", { name: "Read passage", exact: true }).click();
   assert.equal(await localUse.getAttribute("aria-pressed"), "true");
   assert.equal(await localUse.evaluate(element => document.activeElement === element), true);
@@ -203,6 +207,11 @@ try {
   await page.waitForFunction(() => !document.querySelector("dialog"));
   assert.equal(await page.locator("#graph .cog-logseq").count(), 1);
   assert.equal(await page.getByRole("button", { name: "Expand", exact: true }).evaluate(element => element === document.activeElement), true);
+  await page.getByRole('button', { name: 'Expand', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Native source');
+  assert.equal(await page.locator('dialog').count(), 0, 'Editing must exit the modal before focusing the host editor');
+  assert.equal(await graphElement.evaluate(element => element.isConnected), true);
 
   // Enter opens the same native buffer without replacing the Map.
   await firstMark.focus(); await page.keyboard.press("Enter");
@@ -219,17 +228,31 @@ try {
   assert.equal(await rows.count(), 3);
   assert.match(await page.locator(".cog-reading-diagnostics summary").textContent(), /error/);
   assert.equal(await page.locator('.cog-reading-row[data-line="3"] .cog-reading-diagnostic').textContent(), "UNKNOWN_POINT_REFERENCE");
-  assert.equal(await page.locator(".cog-logseq-issues").isVisible(), true);
+  assert.equal(await page.locator(".cog-block-issues").isVisible(), true);
   await page.getByRole("button", { name: "Map", exact: true }).click();
-  assert.equal(await page.locator('.cog-logseq-detail').isHidden(), true, "stale selection survived a source edit");
-  await page.locator(".cog-logseq-issues").click();
+  assert.equal(await page.locator('.cog-block-detail').isHidden(), true, "stale selection survived a source edit");
+  await page.locator(".cog-block-issues").click();
   assert.equal(await page.locator(".cog-reading-diagnostics").isVisible(), true);
+  assert.equal(await page.locator('.cog-reading-diagnostics').getAttribute('open'), '');
+
+  // A pending source navigation must not select or focus an obsolete revision.
+  await rows.first().click();
+  const selectionsBefore = await page.evaluate(() => {
+    const count = window.nativeEditorLog.selections.length;
+    document.querySelector('.cog-block-actions button').click();
+    window.hostRender('fenced', { lang: 'cog', content: '- [C] New revision.' });
+    return count;
+  });
+  await frames();
+  assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.length), selectionsBefore);
+  assert.equal(await page.locator('.cog-block-status').isHidden(), true);
 
   // Unmount while expanded releases both views and the modal outside the host component.
   await page.getByRole("button", { name: "Expand", exact: true }).click();
   await page.evaluate(() => window.hostUnmount());
   assert.equal(await page.locator(".cog-logseq").count(), 0);
-  assert.equal(await page.locator(".cog-logseq-dialog").count(), 0);
+  assert.equal(await page.locator(".cog-block-dialog").count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), [true, false], "Unmount must restore the original native wrapping option");
 
   // DB code block: the host-side predicate matches only Cogitatum code blocks.
   const props = lang => ({ blockId: "b1", uuid: "b1", content: "- [C] From a DB code block.", properties: { "logseq.property.node/display-type": "code", "logseq.property.code/lang": lang } });
@@ -237,10 +260,12 @@ try {
   await page.evaluate(([value]) => { window.hostMount(); window.hostRender("block", value); }, [props("cog")]);
   await rows.first().waitFor();
   assert.equal(await rows.first().locator(".cog-reading-text").textContent(), "From a DB code block.");
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  assert.match(await page.getByRole('status').textContent(), /native Edit action/);
   // A host contract violation shows a plain error panel instead of throwing into the host renderer.
   await page.evaluate(([value]) => window.hostRender("block", { ...value, content: 42 }), [props("cog")]);
-  assert.match(await page.locator('.cog-logseq-error[role="alert"]').textContent(), /^Cogitatum could not render this block: /);
-  assert.equal(await page.locator(".cog-logseq-body").isHidden(), true);
+  assert.match(await page.locator('.cog-block-error[role="alert"]').textContent(), /^Could not render this block: /);
+  assert.equal(await page.locator(".cog-block-body").isHidden(), true);
   await page.evaluate(() => window.hostUnmount());
 
   // CJK linked topology, small screens and host-theme changes use the same production view and CSS.
@@ -262,7 +287,7 @@ try {
   assert.equal(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.cog-node')?.getAttribute('data-node'), groundClick), await ground.getAttribute('data-node'));
   await page.mouse.click(groundClick.x, groundClick.y);
   assert.equal(await ground.getAttribute('aria-pressed'), 'true', 'CJK wording did not select its Ground');
-  assert.match(await page.locator('.cog-logseq-detail-text').textContent(), /正因數只有 1 和自身的自然數/);
+  assert.match(await page.locator('.cog-block-detail-text').textContent(), /正因數只有 1 和自身的自然數/);
 
   const dragGround = async (reduced = false) => {
     const at = await labelCenter(), before = await ground.getAttribute('transform');
