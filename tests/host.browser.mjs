@@ -25,7 +25,7 @@ window.logseq = { api: {}, sdk: { experiments: {
 document.addEventListener("keydown", event => log.keys.push(event.key));
 let root;
 window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [] };
-function HostFence({ opts, content }) {
+function HostFence({ opts, content, preview = true }) {
   const [value, setValue] = React.useState(content), [active, setActive] = React.useState(false);
   React.useEffect(() => setValue(content), [content]);
   const input = React.useRef(null), wrapping = React.useRef(false);
@@ -40,7 +40,7 @@ function HostFence({ opts, content }) {
     React.createElement("div", { className: "ui-fenced-code-result", onMouseDown: event => { if (opts.edit === false) { event.preventDefault(); event.stopPropagation(); } } },
       React.createElement("span", { className: "actions" },
         React.createElement("button", { title: "Host source", onClick: () => { window.nativeEditorLog.toggles++; setActive(!active); } }, "<>"),
-        React.createElement("button", { title: "Host edit" }, "E")), React.createElement(opts.render, { content: value })));
+        React.createElement("button", { title: "Host edit" }, "E")), preview ? React.createElement(opts.render, { content: value }) : null));
 }
 window.hostMount = () => {
   const block = document.createElement("div"); block.className = "block-content";
@@ -51,7 +51,7 @@ window.hostMount = () => {
 window.hostRender = (kind, props) => flushSync(() => {
   if (kind === "fenced") {
     const opts = fenced.get(props.lang);
-    root.render(React.createElement(HostFence, { opts, content: props.content }));
+    root.render(React.createElement(HostFence, { opts, content: props.content, preview: props.preview }));
   } else root.render(React.createElement(blocks.get("cogitatum-code").render, props));
 });
 window.hostMatches = props => blocks.get("cogitatum-code").when(props);
@@ -253,6 +253,30 @@ try {
   assert.equal(await page.locator(".cog-logseq").count(), 0);
   assert.equal(await page.locator(".cog-block-dialog").count(), 0);
   assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), [true, false], "Unmount must restore the original native wrapping option");
+
+  // React removes only the preview before effect cleanup; Logseq retains its fence and editor.
+  const cleanupSource = "- [C] Wrapper cleanup.";
+  await page.evaluate(content => { window.hostMount(); window.hostRender('fenced', { lang: 'cog', content }); }, cleanupSource);
+  const retainedWrapper = await page.locator('.ui-fenced-code-wrap').elementHandle();
+  const retainedEditor = await page.locator('textarea[aria-label="Native source"]').elementHandle();
+  for (const expanded of [false, true]) {
+    await page.evaluate(content => window.hostRender('fenced', { lang: 'cog', content, preview: true }), cleanupSource);
+    const wrappingBefore = await page.evaluate(() => window.nativeEditorLog.wrapping.length);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.waitForSelector('[data-cog-editing="true"]');
+    if (expanded) await page.getByRole('button', { name: 'Expand', exact: true }).click();
+    await page.evaluate(content => window.hostRender('fenced', { lang: 'cog', content, preview: false }), cleanupSource);
+    assert.equal(await retainedWrapper.evaluate(element => element.isConnected), true);
+    assert.equal(await page.getByRole('textbox', { name: 'Native source' }).evaluate((element, saved) => element === saved, retainedEditor), true);
+    assert.equal(await page.locator('.cog-logseq').count(), 0);
+    assert.equal(await page.locator('.cog-block-dialog').count(), 0);
+    assert.equal(await retainedWrapper.getAttribute('data-cog-editing'), null, 'Preview cleanup must clear its retained fence marker');
+    assert.notEqual(await retainedWrapper.evaluate(element => getComputedStyle(element).display), 'grid', 'Preview cleanup must release the parallel layout');
+    assert.deepEqual(await page.evaluate(start => window.nativeEditorLog.wrapping.slice(start), wrappingBefore), [true, false]);
+    assert.equal(await page.locator('.CodeMirror').evaluate(element => element.CodeMirror.getOption('lineWrapping')), false);
+    assert.equal(await page.getByRole('textbox', { name: 'Native source' }).inputValue(), cleanupSource);
+  }
+  await page.evaluate(() => window.hostUnmount());
 
   // DB code block: the host-side predicate matches only Cogitatum code blocks.
   const props = lang => ({ blockId: "b1", uuid: "b1", content: "- [C] From a DB code block.", properties: { "logseq.property.node/display-type": "code", "logseq.property.code/lang": lang } });

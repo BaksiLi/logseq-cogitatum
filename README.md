@@ -8,13 +8,14 @@ It does not infer structure from ordinary outline blocks.
 ## Project boundary
 
 This standalone local project owns the Logseq adapter, its tests and its installable plugin.
-The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `f2c89923868ceb8bd973453c395b3cd49d73eb3a`.
+The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `3a8052bb5ae81b5c12ef346a0bf26ae2130dce95`.
 The two archives in `vendor/` retain the unpublished 0.5.0 candidate; no sibling source checkout or parent workspace is required.
+Every archived file was compared byte-for-byte with that checkout's source and built output (43 Core files, 37 View files).
 Their SHA-256 checksums are:
 
 ```text
-6615a2d879e18b72ce3b8f6e3105b98908c45067b13dd510492043df49f2b215  cogitatum-core-0.5.0.tgz
-370ba49c49b496d602ec0a68975a1f3be2545a2b16e8b20cfbca015bcf6183fe  cogitatum-view-0.5.0.tgz
+d3961f906072359ff3f305bf6000e1afdacfd39863eed64696f708f75099ce50  cogitatum-core-0.5.0.tgz
+68eaf7831dd04baeb74d04f76086e42b89df60971bc86c777bf7ff00143d679c  cogitatum-view-0.5.0.tgz
 ```
 
 This candidate includes bounded focus on directly related Bearings, measured label hit areas, and respects reduced motion in the shared stylesheet.
@@ -115,16 +116,36 @@ It reproduces Logseq's global `svg { pointer-events: none }` rule and checks rea
 CJK wording hit areas, node dragging versus camera panning, and frame-by-frame Arrange behavior under both motion preferences.
 It also covers native editor reuse and source-to-Map updates, stale source identities, source changes during a captured drag, local-use selection, Map controls, native modal focus/cleanup,
 diagnostics after edits, bounded visibility of objections to a selected Point's steps,
+preview-only unmount with a retained native wrapper/editor (including while expanded),
 both motion preferences, the host's overlapping source controls, CJK labels, theme variables and a 360px viewport.
 Set `COGITATUM_SCREENSHOT_DIR` when running it to retain visual checks.
 Neither is a running Logseq app.
-The user loaded the unpacked plugin into Logseq `0.10.15`.
+The following native results were reported from Logseq `0.10.15`, with Core/View pinned to
+public commit `3a8052bb5ae81b5c12ef346a0bf26ae2130dce95`.
+The integration bundle whose `dist/main.js` SHA-256 is
+`628a7bdf686122c1ad6eda8fcb4239ef58e797107c81036d2ec2cdd252eb0c8d`
+passed plugin reload, Enter selecting the exact Ground passage at line 4, native typing updating the preview,
+and Map selection followed by Expand and Edit preserving the exact native selection.
+Additional native checks with `use`, emoji and U+2028 preserved the exact local occurrence;
+Bearing selection followed by Map, Expand and Edit also passed.
+After native fixture restoration, `cmp` confirmed the fixture was byte-for-byte identical to its baseline.
+Cmd+Z restored the source byte-for-byte but navigated to Journals; smooth undo navigation is not claimed.
+
+The final cleanup bundle whose `dist/main.js` SHA-256 is
+`7da403cd92f1e0a81e2eac2c2317809643debf706bd7cc5abbe1f0cdf5cd9273`
+passed native reload, leaving and returning to `note/cogitatum-showcase` to remount the preview,
+Enter selecting the exact native passage at line 4, and Map expansion.
+The final Expanded Edit step was interrupted by user interaction and was not completed;
+the earlier bundle's passing result does not establish that step for the final bundle.
+The specific cleanup order in which React removes only the preview while retaining the host wrapper and editor
+is covered by the browser harness, including while expanded; that order has not been verified in the native app.
+
+Earlier native observations follow.
 The `note/cogitatum-showcase` page was observed rendering a conclusion, a linked step and two grounds in Reading and Map.
 Native checks cover Reading/Map switching, Chinese wording selection and dragging,
 connected-node response, background panning, Arrange, Fit, expansion and Escape return.
 Edit alongside, exact source-range navigation and live source-to-Map updates were also checked.
 The source was restored byte-for-byte after the edit test.
-The host undo restored the text but navigated to Journals in that test; smooth undo navigation is not claimed.
 Dark theme, reduced motion and narrow viewport checks use the browser harness;
 the macOS motion preference was not changed for the real-host check.
 This is not comprehensive host compatibility.

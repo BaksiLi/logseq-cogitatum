@@ -11,9 +11,13 @@ type NativeEditor = {
 
 /** Logseq's fenced renderer exposes only content, so reuse its existing editor and toggle. */
 export function createSourceEditor(container: HTMLElement) {
-  let wrapped: { editor: NativeEditor; original: boolean } | undefined;
-  function restoreWrapping() {
-    if (wrapped) { wrapped.editor.setOption("lineWrapping", wrapped.original); wrapped = undefined; }
+  let parallel: { wrap: HTMLElement; editor: NativeEditor; original: boolean } | undefined;
+  function restoreParallelEditing() {
+    if (!parallel) return;
+    parallel.editor.setOption("lineWrapping", parallel.original);
+    // React may detach the preview before cleanup while its host fence remains mounted.
+    delete parallel.wrap.dataset.cogEditing;
+    parallel = undefined;
   }
   return {
     async edit({ source, sourceSpan: span, signal }: BlockEditRequest): Promise<void> {
@@ -29,12 +33,12 @@ export function createSourceEditor(container: HTMLElement) {
       if (!editor || !wrap.classList.contains("is-active")) throw new Error("Logseq could not open its code editor. Use the block's native Edit action.");
       const normal = (text: string) => text.replace(/\r\n/g, "\n").replace(/\n$/, "");
       if (normal(editor.getValue()) !== normal(source)) throw new Error("The source changed. Select the passage again in the updated preview.");
-      wrap.dataset.cogEditing = "true";
-      if (wrapped?.editor !== editor) {
-        restoreWrapping();
-        wrapped = { editor, original: editor.getOption("lineWrapping") };
+      if (parallel?.editor !== editor || parallel.wrap !== wrap) {
+        restoreParallelEditing();
+        parallel = { wrap, editor, original: editor.getOption("lineWrapping") };
         editor.setOption("lineWrapping", true);
       }
+      wrap.dataset.cogEditing = "true";
       editor.refresh();
       if (span) editor.setSelection(
         { line: span.startLine - 1, ch: span.startColumn - 1 },
@@ -42,10 +46,6 @@ export function createSourceEditor(container: HTMLElement) {
       );
       editor.focus();
     },
-    destroy() {
-      restoreWrapping();
-      const wrap = container.closest<HTMLElement>(".ui-fenced-code-wrap");
-      if (wrap) delete wrap.dataset.cogEditing;
-    }
+    destroy: restoreParallelEditing
   };
 }
