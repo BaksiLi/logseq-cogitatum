@@ -8,17 +8,23 @@ It does not infer structure from ordinary outline blocks.
 ## Project boundary
 
 This standalone local project owns the Logseq adapter, its tests and its installable plugin.
-The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `3a8052bb5ae81b5c12ef346a0bf26ae2130dce95`.
+The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `4bc2fab03f9b8a06c6abfbb940240c6906f3d397`.
 The two archives in `vendor/` retain the unpublished 0.5.0 candidate; no sibling source checkout or parent workspace is required.
 Every archived file was compared byte-for-byte with that checkout's source and built output (43 Core files, 37 View files).
 Their SHA-256 checksums are:
 
 ```text
-d3961f906072359ff3f305bf6000e1afdacfd39863eed64696f708f75099ce50  cogitatum-core-0.5.0.tgz
-68eaf7831dd04baeb74d04f76086e42b89df60971bc86c777bf7ff00143d679c  cogitatum-view-0.5.0.tgz
+13da5dfb36a03a710425b6ca52d9ce1d18cdc645c3dd41e979b3d3f9c3570f16  cogitatum-core-0.5.0.tgz
+62ba78d85328020d5e3350286934756b07f5f38b4c6f2b3b75054571488679a8  cogitatum-view-0.5.0.tgz
 ```
 
 This candidate includes bounded focus on directly related Bearings, measured label hit areas, and respects reduced motion in the shared stylesheet.
+The collapsed footer shows the installed Core version.
+Open it to inspect Core, View, Logseq plugin, host build revision and the full reviewed source commit.
+Build metadata comes from the installed package manifests and this project's manifest; no version is hardcoded in the adapter.
+Host build uses this repository's `git describe --always --dirty`, without a timestamp.
+It reports `unavailable` when Git metadata cannot be read, so source archives can still build.
+Rebuild after committing so the bundle identifies the final adapter commit instead of the preceding dirty revision.
 This is a local experiment, not a submitted or published plugin.
 
 ## Build and load
@@ -118,8 +124,11 @@ It also covers native editor reuse and source-to-Map updates, stale source ident
 diagnostics after edits, bounded visibility of objections to a selected Point's steps,
 preview-only unmount with a retained native wrapper/editor (including while expanded),
 both motion preferences, the host's overlapping source controls, CJK labels, theme variables and a 360px viewport.
+It also checks the version footer against build metadata, native disclosure open/close, and narrow-screen overflow.
 Set `COGITATUM_SCREENSHOT_DIR` when running it to retain visual checks.
 Neither is a running Logseq app.
+The version-footer candidate using public commit `4bc2fab03f9b8a06c6abfbb940240c6906f3d397` awaits native validation.
+The native evidence below belongs to the earlier bundles identified by their hashes.
 The following native results were reported from Logseq `0.10.15`, with Core/View pinned to
 public commit `3a8052bb5ae81b5c12ef346a0bf26ae2130dce95`.
 The integration bundle whose `dist/main.js` SHA-256 is

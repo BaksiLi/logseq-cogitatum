@@ -6,11 +6,12 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
+import { version, versionDefine } from "../build-metadata.mjs";
 
 const here = fileURLToPath(new URL("..", import.meta.url));
 const bundle = async contents => (await build({
   stdin: { contents, resolveDir: here, loader: "ts" }, bundle: true, write: false, format: "iife",
-  platform: "browser", loader: { ".css": "text" }, define: { "process.env.NODE_ENV": '"production"' }, logLevel: "silent"
+  platform: "browser", loader: { ".css": "text" }, define: { "process.env.NODE_ENV": '"production"', ...versionDefine }, logLevel: "silent"
 })).outputFiles[0].text;
 
 const host = await bundle(`
@@ -115,6 +116,15 @@ try {
   await page.evaluate(([content]) => { window.hostMount(); window.hostRender("fenced", { lang: "cog", content }); }, [reading]);
   const rows = page.locator(".cog-logseq .cog-reading-row[data-occurrence]");
   await rows.first().waitFor();
+  const buildInfo = page.locator('.cog-block-version');
+  const buildLabel = buildInfo.locator('summary');
+  assert.equal(await buildLabel.textContent(), version.label);
+  assert.equal(await buildInfo.locator('.cog-block-version-detail').textContent(), version.detail);
+  assert.equal(await buildInfo.getAttribute('open'), null);
+  await buildLabel.click();
+  assert.equal(await buildInfo.getAttribute('open'), '');
+  await buildLabel.click();
+  assert.equal(await buildInfo.getAttribute('open'), null);
   const rowCount = await rows.count();
   assert.ok(rowCount >= 10, `expected occurrence rows, got ${rowCount}`);
   assert.equal(await rows.first().evaluate(element => getComputedStyle(element).animationName), "cog-reading-enter");
@@ -366,6 +376,11 @@ try {
   await page.mouse.move(interrupted.x + 60, interrupted.y); await page.mouse.up();
   await page.evaluate(content => window.hostRender('fenced', { lang: 'cogitatum', content }), linked);
   await frames();
+  if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/version-desktop-closed.png` });
+  await buildLabel.click();
+  assert.equal(await buildInfo.getAttribute('open'), '');
+  if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/version-desktop-open.png` });
+  await buildLabel.click();
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/map-desktop.png` });
   await page.evaluate(() => {
     for (const [key, value] of Object.entries({ "primary-text-color": "#e5e7eb", "secondary-text-color": "#a1a9b2", "primary-background-color": "#182027", "secondary-background-color": "#202b34", "border-color": "#3c4b57", "link-text-color": "#75c5ba" })) document.documentElement.style.setProperty(`--ls-${key}`, value);
@@ -375,6 +390,13 @@ try {
   await page.setViewportSize({ width: 360, height: 780 });
   await frames();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "the mobile card overflows the viewport");
+  await buildLabel.click();
+  assert.equal(await buildInfo.getAttribute('open'), '');
+  assert.equal(await page.locator('.cog-logseq').evaluate(element => element.scrollWidth <= element.clientWidth), true, 'Build information overflows the narrow card');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Build information overflows the viewport');
+  if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/version-mobile-open.png` });
+  await buildLabel.click();
+  if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/version-mobile-closed.png` });
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/map-mobile.png` });
   await page.getByRole("button", { name: "Expand", exact: true }).click();
   await page.getByRole("button", { name: "Fit", exact: true }).click();
