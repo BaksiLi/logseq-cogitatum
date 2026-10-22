@@ -8,14 +8,14 @@ It does not infer structure from ordinary outline blocks.
 ## Project boundary
 
 This standalone local project owns the Logseq adapter, its tests and its installable plugin.
-The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `4bc2fab03f9b8a06c6abfbb940240c6906f3d397`.
-The two archives in `vendor/` retain the unpublished 0.5.0 candidate; no sibling source checkout or parent workspace is required.
+The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `be5c30e1439253fc83a280b8742cfd3d76edf23f`.
+The two archives in `vendor/` retain Core 0.5.0 and the private View snapshot; no sibling source checkout or parent workspace is required.
 Every archived file was compared byte-for-byte with that checkout's source and built output (43 Core files, 37 View files).
 Their SHA-256 checksums are:
 
 ```text
-13da5dfb36a03a710425b6ca52d9ce1d18cdc645c3dd41e979b3d3f9c3570f16  cogitatum-core-0.5.0.tgz
-62ba78d85328020d5e3350286934756b07f5f38b4c6f2b3b75054571488679a8  cogitatum-view-0.5.0.tgz
+abf55db9e112d175e2b62f1bfd09492c3db4cb711b0685e8abf5a37b76f74fd9  cogitatum-core-0.5.0.tgz
+3196f0a29dd92a7fd20ddc3c18f9346e81debb749fc42863548ddc6fccb15847  cogitatum-view-0.5.0.tgz
 ```
 
 This candidate includes bounded focus on directly related Bearings, measured label hit areas, and respects reduced motion in the shared stylesheet.
@@ -127,7 +127,7 @@ both motion preferences, the host's overlapping source controls, CJK labels, the
 It also checks the version footer against build metadata, native disclosure open/close, and narrow-screen overflow.
 Set `COGITATUM_SCREENSHOT_DIR` when running it to retain visual checks.
 Neither is a running Logseq app.
-The version-footer candidate using public commit `4bc2fab03f9b8a06c6abfbb940240c6906f3d397` awaits native validation.
+The final right-alignment and information-icon changes use public commit `be5c30e1439253fc83a280b8742cfd3d76edf23f` and were rebuilt without another native test round.
 The native evidence below belongs to the earlier bundles identified by their hashes.
 The following native results were reported from Logseq `0.10.15`, with Core/View pinned to
 public commit `3a8052bb5ae81b5c12ef346a0bf26ae2130dce95`.
