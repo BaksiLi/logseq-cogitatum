@@ -1,11 +1,12 @@
-import { explainSource, type BearingTarget, type GraphIR } from "@cogitatum/core";
+import { explainSource, type BearingTarget, type GraphIR, type SourceSpan } from "@cogitatum/core";
 import { bearingMark, createGraphView, createReadingView, pointMark, projectReading, type GraphNode, type GraphView } from "@cogitatum/view";
+import { editAlongside } from "./edit.js";
 
 export type CogBlock = {
   update(content: string): void;
   destroy(): void;
 };
-type Mode = "reading" | "map" | "source";
+type Mode = "reading" | "map";
 
 /** The host owns the frame and temporary controls; Core/View own the source and its representation. */
 export function mountCogBlock(container: HTMLElement, content: string): CogBlock {
@@ -30,9 +31,10 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
   const modes = element("div", "cog-logseq-modes", toolbar);
   modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "View");
   const modeButtons = new Map<Mode, HTMLButtonElement>();
-  for (const [mode, label] of [["reading", "Reading"], ["map", "Map"], ["source", "Source"]] as const) {
+  for (const [mode, label] of [["reading", "Reading"], ["map", "Map"]] as const) {
     modeButtons.set(mode, button(modes, label, () => showMode(mode)));
   }
+  const edit = button(toolbar, "Edit alongside", () => { void revealSource(selectedSpan); });
   const issues = button(toolbar, "", () => showMode("reading"));
   issues.classList.add("cog-logseq-issues"); issues.hidden = true;
   const expand = button(toolbar, "Expand", () => toggleExpanded());
@@ -56,11 +58,12 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
   detailText.setAttribute("aria-live", "polite");
   button(detail, "Read passage", () => { showMode("reading"); focusReading(); });
   element("p", "cog-logseq-hint", mapPanel).textContent = "Select a mark or its text for the full wording. Drag to arrange or pan; Ctrl / Cmd + scroll to zoom.";
-  const source = element("pre", "cog-logseq-source", body);
-  source.setAttribute("aria-label", "Cogitatum source (read only)"); source.tabIndex = 0; source.hidden = true;
+  const editStatus = element("p", "cog-logseq-error", root);
+  editStatus.setAttribute("role", "status"); editStatus.hidden = true;
 
   let mode: Mode = "reading", current: string | undefined, graph: GraphIR | undefined, map: GraphView | undefined;
   let selected: BearingTarget | undefined, syncing = false, destroyed = false;
+  let selectedSpan: SourceSpan | undefined;
   let dialog: HTMLDialogElement | undefined;
   const sync = (action: () => void) => {
     syncing = true;
@@ -69,14 +72,17 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
   const reading = createReadingView(readingSurface, {
     onSelect(selection) {
       selected = selection.ref;
+      selectedSpan = selection.sourceSpan;
       sync(() => { if (selected) map?.select(selected); else map?.clear(); });
     },
     onClear() {
-      selected = undefined; detail.hidden = true;
+      selected = undefined; selectedSpan = undefined; detail.hidden = true;
       if (!syncing) sync(() => map?.clear());
-    }
+    },
+    onNavigate(selection) { void revealSource(selection.sourceSpan); }
   });
   function selectNode(node: GraphNode) {
+    if (!selected || selected.kind !== node.ref.kind || selected.key !== node.ref.key) selectedSpan = node.sourceSpan;
     selected = node.ref;
     const name = node.ref.kind === "point" ? pointMark(node.label).name : bearingMark(node.label).name;
     detailText.textContent = `${name}${node.name ? ` @${node.name}` : ""}${node.text !== node.label ? `: ${node.text}` : ""}`;
@@ -86,11 +92,18 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
   function focusReading() {
     readingSurface.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus({ preventScroll: true });
   }
+  async function revealSource(span?: SourceSpan) {
+    edit.disabled = true; editStatus.hidden = true;
+    dialog?.close();
+    try { await editAlongside(container, current ?? "", span); }
+    catch (error) { editStatus.textContent = error instanceof Error ? error.message : String(error); editStatus.hidden = false; }
+    finally { edit.disabled = false; }
+  }
   function showMode(next: Mode) {
     mode = next; root.dataset.mode = mode;
     for (const [key, node] of modeButtons) node.setAttribute("aria-pressed", String(key === mode));
     readingSurface.hidden = mode !== "reading";
-    mapPanel.hidden = mode !== "map"; source.hidden = mode !== "source";
+    mapPanel.hidden = mode !== "map";
     // Mount at the actual size; switching views preserves the camera and the local reading occurrence.
     if (mode === "map" && !map && graph) {
       try {
@@ -98,9 +111,9 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
           onSelect: selectNode,
           onClear() {
             detail.hidden = true;
-            if (!syncing) { selected = undefined; reading.clear(); }
+            if (!syncing) { selected = undefined; selectedSpan = undefined; reading.clear(); }
           },
-          onNavigate() { showMode("reading"); focusReading(); }
+          onNavigate() { void revealSource(selectedSpan); }
         });
         sync(() => { map!.update(graph!, "code-block"); if (selected) map!.select(selected); });
       } catch (error) { showFailure(error); }
@@ -144,8 +157,7 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
       try {
         const explained = explainSource(next, "document");
         graph = explained.graphs[0];
-        selected = undefined; detail.hidden = true;
-        source.textContent = next;
+        selected = undefined; selectedSpan = undefined; detail.hidden = true;
         // No generated key or occurrence is carried to a different source revision.
         sync(() => { reading.update(projectReading(next, explained)); map?.clear(); if (graph) map?.update(graph, "code-block"); });
         const empty = !graph || (!graph.points.length && !graph.bearings.length);
@@ -161,6 +173,8 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
       destroyed = true; abort.abort();
       dialog?.close(); dialog?.remove(); dialog = undefined;
       container.style.minHeight = "";
+      const wrap = container.closest<HTMLElement>(".ui-fenced-code-wrap");
+      if (wrap) delete wrap.dataset.cogEditing;
       map?.destroy(); reading.destroy(); root.remove();
     }
   };

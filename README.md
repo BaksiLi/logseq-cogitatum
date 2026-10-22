@@ -8,13 +8,13 @@ It does not infer structure from ordinary outline blocks.
 ## Project boundary
 
 This standalone local project owns the Logseq adapter, its tests and its installable plugin.
-The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `5ed2581740782b38a5cc380f8260f736f09c60b7`.
+The adapter was extracted from private consumer commit `911ea3b` and consumes packed Core/View from public commit `0d0f73dc21859de1adc059594da21d032beab880`.
 The two archives in `vendor/` retain the unpublished 0.5.0 candidate; no sibling source checkout or parent workspace is required.
 Their SHA-256 checksums are:
 
 ```text
 6615a2d879e18b72ce3b8f6e3105b98908c45067b13dd510492043df49f2b215  cogitatum-core-0.5.0.tgz
-81eb15b6d752d868048c6f99ee50ca9711208219851b53c067591b0bc6e64acc  cogitatum-view-0.5.0.tgz
+fe36ffb53a5ddf7358fcdcdfd377074b8090e71ab76b44d833c694eb42d089ae  cogitatum-view-0.5.0.tgz
 ```
 
 This candidate includes bounded focus on directly related Bearings, measured label hit areas, and respects reduced motion in the shared stylesheet.
@@ -37,15 +37,20 @@ That directory contains its own `package.json`, `index.html` and bundled `main.j
 It can be copied elsewhere without this source project or `node_modules`.
 The root manifest also supports loading the source project directly through `dist/index.html`.
 After rebuilding, reload Cogitatum in Logseq's Plugins screen to load the updated bundle.
-If an already rendered block still shows the previous interface, toggle its native code display to remount it.
+If an already rendered block still shows the previous interface, navigate away and reopen the page to remount it.
 
 Reading preserves the complete source wording and its local occurrences.
 Map shows the compiled relations and supports pan, zoom, Fit and Arrange.
 Selecting a mark or its wording shows the full text; Read passage returns to the corresponding Reading occurrence.
 Drag a mark or its wording to arrange it, or drag empty space to pan.
 Arrange restores the automatic layout, with motion only when the system permits it.
-Source displays the exact block text, read only; editing remains with Logseq's code-block controls.
+Edit alongside opens the existing native code editor beside the preview when space permits, or above it in narrow blocks.
+Enter on a Reading occurrence or Map mark selects its exact source range; repeated actions reuse the same editor.
+Logseq owns the source buffer, input methods, saving and undo.
+The adapter validates the live text before selecting a range and never writes source itself.
 Expand opens the same view in a larger modal; Close or Escape restores it to the note.
+Dragging gently attracts and repels unheld nodes in the connected component, including across joint Bearings.
+Motion stops within 900 ms of the last movement; earlier placements and unrelated fragments stay fixed.
 View, selection, zoom and arrangement are temporary and never saved to the graph.
 
 For a future public project, the candidate archives should be replaced by released Core/View dependencies after their contracts are chosen.
@@ -88,8 +93,9 @@ That release does not export a block renderer.
 - The fence renderer is registered without `edit`.
   `edit: false` would make the host stop every press on the result, which would disable focus and text selection.
 - Fence renderers receive only the source text, not the block identity.
-  Reading's Enter selects the passage; Map's Enter returns to that passage in Reading.
-  Source displays the exact text read only; editing uses the host's code toggle or edit button on the block.
+  Parallel editing bridges the installed 0.10.15 host's fenced-code toggle and CodeMirror editor.
+  This DOM bridge is isolated in `src/edit.ts`; missing or changed host controls produce an explicit message.
+  DB code renderers without that editor still require the host's native Edit action; parallel editing on 2.x DB graphs is unverified.
 - DB graphs: the renderer is skipped while editing and in the sidebar, property, and table views, as the host decides.
   Whether the code-language picker accepts a custom `cog` language is unverified;
   imported Markdown keeps the fence language.
@@ -103,17 +109,18 @@ That release does not export a block renderer.
 against a host page that fakes the renderer contracts with React 19.
 It reproduces Logseq's global `svg { pointer-events: none }` rule and checks real pointer selection,
 CJK wording hit areas, node dragging versus camera panning, and frame-by-frame Arrange behavior under both motion preferences.
-It also covers source-preserving view switches, local-use selection, Map controls, native modal focus/cleanup,
+It also covers native editor reuse and source-to-Map updates, stale source identities, source changes during a captured drag, local-use selection, Map controls, native modal focus/cleanup,
 diagnostics after edits, bounded visibility of objections to a selected Point's steps,
 both motion preferences, the host's overlapping source controls, CJK labels, theme variables and a 360px viewport.
 Set `COGITATUM_SCREENSHOT_DIR` when running it to retain visual checks.
 Neither is a running Logseq app.
 The user loaded the unpacked plugin into Logseq `0.10.15`.
 The `note/cogitatum-showcase` page was observed rendering a conclusion, a linked step and two grounds in Reading and Map.
-View switching, keyboard mark selection with full wording, Read passage focus, Map Fit, read-only Source, expansion and Escape return
-were checked in that running app without editing the block source.
-After restoring Map pointer events, coordinate-based clicks on Chinese wording, node dragging,
-background panning and Arrange restoration were also checked in that app.
+Native checks cover Reading/Map switching, Chinese wording selection and dragging,
+connected-node response, background panning, Arrange, Fit, expansion and Escape return.
+Edit alongside, exact source-range navigation and live source-to-Map updates were also checked.
+The source was restored byte-for-byte after the edit test.
+The host undo restored the text but navigated to Journals in that test; smooth undo navigation is not claimed.
 Dark theme, reduced motion and narrow viewport checks use the browser harness;
 the macOS motion preference was not changed for the real-host check.
 This is not comprehensive host compatibility.

@@ -24,6 +24,21 @@ window.logseq = { api: {}, sdk: { experiments: {
 } } };
 document.addEventListener("keydown", event => log.keys.push(event.key));
 let root;
+window.nativeEditorLog = { toggles: 0, selections: [] };
+function HostFence({ opts, content }) {
+  const [value, setValue] = React.useState(content), [active, setActive] = React.useState(false);
+  React.useEffect(() => setValue(content), [content]);
+  const input = React.useRef(null);
+  return React.createElement("div", { className: "ui-fenced-code-wrap" + (active ? " is-active" : "") },
+    React.createElement("div", { className: "ui-fenced-code-editor" }, React.createElement("div", { className: "CodeMirror", ref: node => {
+      if (node) node.CodeMirror = { getValue: () => input.current.value, refresh() {}, focus: () => input.current.focus(),
+        setSelection: (from, to) => window.nativeEditorLog.selections.push({ from, to }) };
+    } }, React.createElement("textarea", { ref: input, "aria-label": "Native source", value, onChange: event => setValue(event.target.value) }))),
+    React.createElement("div", { className: "ui-fenced-code-result", onMouseDown: event => { if (opts.edit === false) { event.preventDefault(); event.stopPropagation(); } } },
+      React.createElement("span", { className: "actions" },
+        React.createElement("button", { title: "Host source", onClick: () => { window.nativeEditorLog.toggles++; setActive(!active); } }, "<>"),
+        React.createElement("button", { title: "Host edit" }, "E")), React.createElement(opts.render, { content: value })));
+}
 window.hostMount = () => {
   const block = document.createElement("div"); block.className = "block-content";
   // Stand-in for Logseq's block-content press handler, which enters editing mode.
@@ -33,10 +48,7 @@ window.hostMount = () => {
 window.hostRender = (kind, props) => flushSync(() => {
   if (kind === "fenced") {
     const opts = fenced.get(props.lang);
-    // Mirrors hook-ui-fenced-code: presses are stopped only when edit is false.
-    root.render(React.createElement("div", { className: "ui-fenced-code-result", onPointerDown: event => { if (opts.edit === false) { event.preventDefault(); event.stopPropagation(); } } },
-      React.createElement("div", { className: "host-code-controls" }, React.createElement("button", { title: "Host source" }, "<>"), React.createElement("button", { title: "Host edit" }, "E")),
-      React.createElement(opts.render, { content: props.content })));
+    root.render(React.createElement(HostFence, { opts, content: props.content }));
   } else root.render(React.createElement(blocks.get("cogitatum-code").render, props));
 });
 window.hostMatches = props => blocks.get("cogitatum-code").when(props);
@@ -61,7 +73,7 @@ top.pluginUnload = () => unload();
 `);
 
 const files = {
-  "/host.html": ["text/html", `<!doctype html><style>:root{--ls-primary-text-color:rgb(1, 2, 3)} body{margin:16px;font:15px/1.5 sans-serif} svg{pointer-events:none} #graph{width:800px;max-width:100%} .ui-fenced-code-result{position:relative} .host-code-controls{position:absolute;top:8px;right:4px;z-index:2;display:flex} .host-code-controls button{box-sizing:border-box;width:28px;height:28px}</style><div id="graph"></div><script src="/host.js"></script>`],
+  "/host.html": ["text/html", `<!doctype html><style>:root{--ls-primary-text-color:rgb(1, 2, 3)} body{margin:16px;font:15px/1.5 sans-serif} svg{pointer-events:none} #graph{width:800px;max-width:100%} .ui-fenced-code-wrap:not(.is-active) .ui-fenced-code-editor{display:none!important} .ui-fenced-code-result{position:relative} textarea{width:100%;min-height:200px} .actions{position:absolute;top:8px;right:4px;z-index:2;display:flex} .actions button{box-sizing:border-box;width:28px;height:28px}</style><div id="graph"></div><script src="/host.js"></script>`],
   "/host.js": ["text/javascript", host],
   "/plugin.html": ["text/html", `<!doctype html><script src="/plugin.js"></script>`],
   "/plugin.js": ["text/javascript", plugin],
@@ -145,8 +157,12 @@ try {
   // Selecting a reused Ground keeps direct objections to its steps visible, without following their replies.
   assert.equal(await page.locator('.cog-reading-row[data-line="16"]').getAttribute("data-related"), "true");
   assert.equal(await page.locator('.cog-reading-row[data-line="14"]').getAttribute("data-related"), "false");
-  await page.getByRole("button", { name: "Source", exact: true }).click();
-  assert.equal(await page.locator(".cog-logseq-source").textContent(), reading);
+  await page.getByRole("button", { name: "Edit alongside", exact: true }).click();
+  await page.waitForSelector('[data-cog-editing="true"]');
+  assert.equal(await page.getByRole('textbox', { name: 'Native source' }).inputValue(), reading);
+  assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.at(-1).from.line), 10);
+  await page.getByRole("button", { name: "Edit alongside", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.nativeEditorLog.toggles), 1);
   await page.getByRole("button", { name: "Map", exact: true }).click();
   await frames();
   assert.equal(await page.locator('.cog-graph').evaluate(element => getComputedStyle(element).pointerEvents), 'auto', "Logseq's global SVG rule disabled the Map");
@@ -188,15 +204,16 @@ try {
   assert.equal(await page.locator("#graph .cog-logseq").count(), 1);
   assert.equal(await page.getByRole("button", { name: "Expand", exact: true }).evaluate(element => element === document.activeElement), true);
 
-  // Enter on a different Map node returns to its source reading, with keyboard focus on that passage.
+  // Enter opens the same native buffer without replacing the Map.
   await firstMark.focus(); await page.keyboard.press("Enter");
-  assert.equal(await page.getByRole("button", { name: "Reading", exact: true }).getAttribute("aria-pressed"), "true");
-  assert.equal(await page.locator('.cog-reading-row[aria-pressed="true"]').evaluate(element => element === document.activeElement), true);
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Native source');
+  assert.equal(await page.getByRole("button", { name: "Map", exact: true }).getAttribute("aria-pressed"), "true");
 
   // Source edits update the same view instance in place; compiler diagnostics stay visible.
   const mounted = await page.locator(".cog-logseq").elementHandle();
-  await page.evaluate(([content]) => window.hostRender("fenced", { lang: "cog", content }), [broken]);
+  await page.getByRole('textbox', { name: 'Native source' }).fill(broken);
   await frames();
+  assert.equal(await page.getByRole("button", { name: "Map", exact: true }).getAttribute("aria-pressed"), "true");
   assert.equal(await page.locator(".cog-logseq").count(), 1);
   assert.equal(await mounted.evaluate(element => element.isConnected), true);
   assert.equal(await rows.count(), 3);
@@ -247,7 +264,7 @@ try {
   assert.equal(await ground.getAttribute('aria-pressed'), 'true', 'CJK wording did not select its Ground');
   assert.match(await page.locator('.cog-logseq-detail-text').textContent(), /正因數只有 1 和自身的自然數/);
 
-  const dragGround = async () => {
+  const dragGround = async (reduced = false) => {
     const at = await labelCenter(), before = await ground.getAttribute('transform');
     const claim = page.locator('.cog-graph .point').first(), claimBefore = await claim.getAttribute('transform');
     await page.mouse.move(at.x, at.y); await page.mouse.down();
@@ -255,7 +272,7 @@ try {
     assert.equal(await page.locator('.cog-graph').getAttribute('data-dragging'), 'node', 'label drag panned the camera');
     await page.mouse.up(); await frames();
     assert.notEqual(await ground.getAttribute('transform'), before, 'dragging wording did not move its node');
-    assert.equal(await claim.getAttribute('transform'), claimBefore, 'dragging a Ground moved the nonincident Claim');
+    if (reduced) assert.equal(await claim.getAttribute('transform'), claimBefore, 'Reduced motion moved a neighbour');
   };
   const samplePositions = () => page.evaluate(() => new Promise(resolve => {
     const positions = [], start = performance.now();
@@ -272,7 +289,7 @@ try {
 
   // Reduced motion keeps direct manipulation but restores the layout without interpolation.
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await dragGround();
+  await dragGround(true);
   await page.getByRole('button', { name: 'Arrange', exact: true }).click();
   const immediate = await samplePositions();
   assert.equal(new Set(immediate).size, 1, 'Arrange animated despite reduced motion');
@@ -289,6 +306,16 @@ try {
   assert.equal(await ground.getAttribute('aria-pressed'), 'true');
   assert.equal(await page.evaluate(() => window.hostLog.blockPresses), 0);
   await page.getByRole('button', { name: 'Fit', exact: true }).click();
+  await frames();
+  // A delayed host edit may arrive while the pointer still holds an old revision.
+  const interrupted = await labelCenter();
+  await page.mouse.move(interrupted.x, interrupted.y); await page.mouse.down();
+  await page.mouse.move(interrupted.x + 40, interrupted.y, { steps: 4 });
+  await page.evaluate(() => window.hostRender('fenced', { lang: 'cogitatum', content: '- [C] Replacement.' }));
+  await frames();
+  assert.equal(await page.locator('.cog-graph').getAttribute('data-dragging'), null);
+  await page.mouse.move(interrupted.x + 60, interrupted.y); await page.mouse.up();
+  await page.evaluate(content => window.hostRender('fenced', { lang: 'cogitatum', content }), linked);
   await frames();
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/map-desktop.png` });
   await page.evaluate(() => {
