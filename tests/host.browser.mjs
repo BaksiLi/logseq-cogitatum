@@ -6,12 +6,14 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
-import { version, versionDefine } from "../build-metadata.mjs";
+import { explainSource } from "@cogitatum/core";
+import { projectReading } from "@cogitatum/view";
+import { buildDefine, version } from "../build-metadata.mjs";
 
 const here = fileURLToPath(new URL("..", import.meta.url));
 const bundle = async contents => (await build({
   stdin: { contents, resolveDir: here, loader: "ts" }, bundle: true, write: false, format: "iife",
-  platform: "browser", loader: { ".css": "text" }, define: { "process.env.NODE_ENV": '"production"', ...versionDefine }, logLevel: "silent"
+  platform: "browser", loader: { ".css": "text" }, define: { "process.env.NODE_ENV": '"production"', ...buildDefine }, logLevel: "silent"
 })).outputFiles[0].text;
 
 const host = await bundle(`
@@ -25,18 +27,31 @@ window.logseq = { api: {}, sdk: { experiments: {
 } } };
 document.addEventListener("keydown", event => log.keys.push(event.key));
 let root;
-window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [] };
+window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [], focuses: 0, actions: [] };
 function HostFence({ opts, content, preview = true }) {
   const [value, setValue] = React.useState(content), [active, setActive] = React.useState(false);
   React.useEffect(() => setValue(content), [content]);
+  window.hostEdit = content => flushSync(() => setValue(content));
   const input = React.useRef(null), wrapping = React.useRef(false);
   return React.createElement("div", { className: "ui-fenced-code-wrap" + (active ? " is-active" : "") },
     React.createElement("div", { className: "ui-fenced-code-editor" }, React.createElement("div", { className: "CodeMirror", ref: node => {
       if (node && !node.CodeMirror) node.CodeMirror = {
-        getOption: () => wrapping.current,
-        setOption: (name, value) => { wrapping.current = value; window.nativeEditorLog.wrapping.push(value); },
-        getValue: () => input.current.value, refresh() {}, focus: () => input.current.focus(),
-        setSelection: (from, to) => window.nativeEditorLog.selections.push({ from, to }) };
+        getOption() {
+          const value = wrapping.current;
+          window.nativeEditorLog.actions.push('getOption'); window.onNativeEditorAction?.('getOption', node);
+          return value;
+        },
+        setOption(name, value) {
+          wrapping.current = value; window.nativeEditorLog.wrapping.push(value);
+          window.nativeEditorLog.actions.push('setOption'); window.onNativeEditorAction?.('setOption', node);
+        },
+        getValue: () => input.current.value,
+        refresh() { window.nativeEditorLog.actions.push('refresh'); window.onNativeEditorAction?.('refresh', node); },
+        focus() { window.nativeEditorLog.actions.push('focus'); window.nativeEditorLog.focuses++; input.current?.focus(); },
+        setSelection(from, to) {
+          window.nativeEditorLog.selections.push({ from, to });
+          window.nativeEditorLog.actions.push('selection'); window.onNativeEditorAction?.('selection', node);
+        } };
     } }, React.createElement("textarea", { ref: input, "aria-label": "Native source", value, onChange: event => setValue(event.target.value) }))),
     React.createElement("div", { className: "ui-fenced-code-result", onMouseDown: event => { if (opts.edit === false) { event.preventDefault(); event.stopPropagation(); } } },
       React.createElement("span", { className: "actions" },
@@ -116,6 +131,10 @@ try {
   await page.evaluate(([content]) => { window.hostMount(); window.hostRender("fenced", { lang: "cog", content }); }, [reading]);
   const rows = page.locator(".cog-logseq .cog-reading-row[data-occurrence]");
   await rows.first().waitFor();
+  const logo = page.locator(".cog-block-logo");
+  assert.equal(await logo.count(), 1);
+  assert.equal(await logo.getAttribute("aria-hidden"), "true");
+  assert.equal(await logo.evaluate(element => getComputedStyle(element).maskImage.includes("data:image/svg+xml,")), true);
   const buildInfo = page.locator('.cog-block-version');
   const buildLabel = buildInfo.locator('summary');
   assert.equal(await buildLabel.textContent(), version.label);
@@ -140,7 +159,7 @@ try {
   await page.evaluate(() => document.addEventListener("pointerdown", event => { window.press = event; }, { capture: true, once: true }));
   const second = rows.nth(1);
   await second.click();
-  assert.equal(await second.getAttribute("aria-pressed"), "true");
+  assert.equal(await second.locator(".cog-reading-select").getAttribute("aria-pressed"), "true");
   assert.equal(await second.evaluate(element => document.activeElement === element), true);
   assert.equal(await page.evaluate(() => window.hostLog.blockPresses), 0);
   // Read after dispatch has finished, so every listener in the path has had its chance to prevent it.
@@ -159,7 +178,7 @@ try {
   await page.keyboard.press("ArrowDown");
   assert.equal(await rows.nth(2).evaluate(element => document.activeElement === element), true);
   await page.keyboard.press("Escape");
-  assert.equal(await page.locator('.cog-reading-row[aria-pressed="true"]').count(), 0);
+  assert.equal(await page.locator('.cog-reading-select[aria-pressed="true"]').count(), 0);
   await page.keyboard.press("k");
   await page.keyboard.press("Escape"); // nothing selected now: the host owns Escape again
   assert.deepEqual(await page.evaluate(() => window.hostLog.keys), ["k", "Escape"]);
@@ -168,12 +187,12 @@ try {
   const localUse = page.locator('.cog-reading-row[data-line="11"]');
   await localUse.click();
   // Selecting a reused Ground keeps direct objections to its steps visible, without following their replies.
-  assert.equal(await page.locator('.cog-reading-row[data-line="16"]').getAttribute("data-related"), "true");
+  assert.equal(await page.locator('.cog-reading-row[data-line="13"]').getAttribute("data-related"), "true");
   assert.equal(await page.locator('.cog-reading-row[data-line="14"]').getAttribute("data-related"), "false");
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.waitForSelector('[data-cog-editing="true"]');
   assert.equal(await page.getByRole('textbox', { name: 'Native source' }).inputValue(), reading);
-  assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.at(-1).from.line), 10);
+  assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.at(-1).from.line), 8);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   assert.equal(await page.evaluate(() => window.nativeEditorLog.toggles), 1);
   assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), [true], 'Native wrapping should be enabled once for parallel editing');
@@ -182,12 +201,14 @@ try {
   assert.equal(await page.locator('.cog-graph').evaluate(element => getComputedStyle(element).pointerEvents), 'auto', "Logseq's global SVG rule disabled the Map");
   const mapNode = page.locator('.cog-graph .cog-node[aria-pressed="true"]');
   assert.equal(await mapNode.count(), 1);
-  assert.equal(await page.locator('.cog-graph .point[aria-label*="Slow upstream calls"]').getAttribute("data-related"), "true");
+  const acqFailure = page.locator('.cog-graph .point[aria-label*="Between 02:00 and 03:00"]');
   assert.equal(await page.locator('.cog-graph .point[aria-label*="A leak would keep"]').getAttribute("data-related"), "false");
-  assert.match(await page.locator(".cog-block-detail-text").textContent(), /Between 02:00 and 03:00/);
+  assert.equal(await acqFailure.getAttribute("data-related"), "true");
+  assert.match(await page.locator(".cog-block-detail-text").textContent(), /Doubling the pool size will prevent these timeouts/);
   await page.getByRole("button", { name: "Read passage", exact: true }).click();
-  assert.equal(await localUse.getAttribute("aria-pressed"), "true");
-  assert.equal(await localUse.evaluate(element => document.activeElement === element), true);
+  const selectedUse = page.locator(".cog-reading-select[aria-pressed='true']");
+  assert.equal(await selectedUse.evaluate(element => element.closest(".cog-reading-row")?.dataset.line), "9");
+  assert.equal(await selectedUse.evaluate(element => element.closest(".cog-reading-row") === document.activeElement), true);
 
   await page.getByRole("button", { name: "Map", exact: true }).click();
   const firstMark = page.locator(".cog-graph .cog-node.point").first();
@@ -245,6 +266,25 @@ try {
   assert.equal(await page.locator(".cog-reading-diagnostics").isVisible(), true);
   assert.equal(await page.locator('.cog-reading-diagnostics').getAttribute('open'), '');
 
+  // Diagnostic Source uses the compiler's exact local span and closes expansion before native focus.
+  const diagnostic = projectReading(broken, explainSource(broken, 'document')).diagnostics.find(item => item.sourceSpan);
+  const diagnosticSource = page.locator('.cog-reading-diagnostic-source').first();
+  const expectedDiagnosticSelection = {
+    from: { line: diagnostic.sourceSpan.startLine - 1, ch: diagnostic.sourceSpan.startColumn - 1 },
+    to: { line: diagnostic.sourceSpan.endLine - 1, ch: diagnostic.sourceSpan.endColumn - 1 }
+  };
+  for (const expanded of [false, true]) {
+    const before = await page.evaluate(() => ({ selections: window.nativeEditorLog.selections.length, toggles: window.nativeEditorLog.toggles }));
+    if (expanded) await page.getByRole('button', { name: 'Expand', exact: true }).click();
+    await diagnosticSource.click();
+    await page.waitForFunction(count => window.nativeEditorLog.selections.length > count, before.selections);
+    assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.selections.at(-1)), expectedDiagnosticSelection);
+    assert.equal(await page.locator('dialog').count(), 0, 'Diagnostic Source closes expansion before native navigation');
+    assert.equal(await page.evaluate(() => window.nativeEditorLog.toggles), before.toggles, 'Diagnostic navigation reuses the native editor');
+    assert.equal(await page.getByRole('textbox', { name: 'Native source' }).evaluate(element => document.activeElement === element), true);
+    assert.equal(await page.getByRole('textbox', { name: 'Native source' }).inputValue(), broken);
+  }
+
   // A pending source navigation must not select or focus an obsolete revision.
   await rows.first().click();
   const selectionsBefore = await page.evaluate(() => {
@@ -287,6 +327,52 @@ try {
     assert.equal(await page.getByRole('textbox', { name: 'Native source' }).inputValue(), cleanupSource);
   }
   await page.evaluate(() => window.hostUnmount());
+
+  // Simulated native callbacks invalidate the request before later mutations or focus.
+  const callbackSource = '- [C @claim] Claim.\n  - [G] Reason.';
+  for (const boundary of ['getOption', 'setOption', 'refresh', 'selection']) {
+    for (const invalidation of ['abort', 'stale', 'source', 'editor']) {
+      await page.evaluate(content => {
+        window.hostMount(); window.hostRender('fenced', { lang: 'cog', content });
+        window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [], focuses: 0, actions: [] };
+      }, callbackSource);
+      await rows.last().waitFor();
+      await page.locator('.cog-reading-row[data-line="2"]').click();
+      await page.evaluate(({ boundary, invalidation }) => {
+        window.nativeBoundary = null;
+        window.onNativeEditorAction = (action, native) => {
+          if (action !== boundary) return;
+          window.onNativeEditorAction = undefined;
+          window.nativeBoundary = { selections: window.nativeEditorLog.selections.length, focuses: window.nativeEditorLog.focuses, actions: window.nativeEditorLog.actions.length };
+          if (invalidation === 'abort') window.hostRender('fenced', { lang: 'cog', content: '- [C @claim] Claim.\n  - [G] Reason.', preview: false });
+          if (invalidation === 'stale') window.hostEdit('- [C] New revision.');
+          if (invalidation === 'source') document.querySelector('textarea').value = 'Changed native buffer.';
+          if (invalidation === 'editor') native.CodeMirror = { ...native.CodeMirror };
+        };
+      }, { boundary, invalidation });
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      await page.waitForFunction(() => window.nativeBoundary !== null);
+      if (invalidation === 'source' || invalidation === 'editor') {
+        await page.getByRole('status').waitFor({ state: 'visible' });
+        assert.match(await page.getByRole('status').textContent(), invalidation === 'source' ? /source changed/i : /native editor/i);
+      } else if (invalidation === 'abort') {
+        assert.equal(await page.locator('.cog-logseq').count(), 0);
+      } else {
+        assert.equal(await page.getByRole('status').isHidden(), true, 'Cancelled revision errors stay out of the new preview');
+      }
+      await frames();
+      const after = await page.evaluate(() => ({
+        selected: window.nativeEditorLog.selections.length - window.nativeBoundary.selections,
+        focused: window.nativeEditorLog.focuses - window.nativeBoundary.focuses,
+        actions: window.nativeEditorLog.actions.slice(window.nativeBoundary.actions).filter(action => action !== 'setOption')
+      }));
+      assert.deepEqual(after, { selected: 0, focused: 0, actions: [] }, boundary + '-' + invalidation + ': no subsequent native mutation or focus; wrapping cleanup is allowed');
+      assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.length), boundary === 'selection' ? 1 : 0);
+      await page.evaluate(() => { window.onNativeEditorAction = undefined; window.hostUnmount(); });
+      assert.equal(await page.locator('[data-cog-editing]').count(), 0, 'Cleanup never resurrects parallel editing after a native callback');
+      assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), boundary === 'getOption' ? [] : [true, false], 'Wrapping acquisition and restoration each occur at most once');
+    }
+  }
 
   // DB code block: the host-side predicate matches only Cogitatum code blocks.
   const props = lang => ({ blockId: "b1", uuid: "b1", content: "- [C] From a DB code block.", properties: { "logseq.property.node/display-type": "code", "logseq.property.code/lang": lang } });
@@ -422,7 +508,7 @@ try {
   }));
   await page.waitForTimeout(300);
   assert.deepEqual(errors, []);
-  process.stdout.write("Logseq host harness passed.\n");
+  process.stdout.write("Logseq host harness passed: exact diagnostic Source and expanded native navigation; 16 simulated getOption/setOption/refresh/selection callback invalidations; registration, Reading/Map, source revision, native cleanup, pointer, narrow view and unload.\n");
 } finally {
   await browser.close();
 }

@@ -2,12 +2,17 @@ import { createBlockView } from "@cogitatum/view/block";
 import { createSourceEditor } from "./edit.js";
 
 declare const __COGITATUM_VERSION__: { label: string; detail: string };
+declare const __COGITATUM_LOGO__: string;
 
 export type CogBlock = { update(content: string): void; destroy(): void };
 
 export function mountCogBlock(container: HTMLElement, content: string): CogBlock {
   const editor = createSourceEditor(container);
-  const block = createBlockView(container, { onEdit: editor.edit, version: __COGITATUM_VERSION__ });
+  const block = createBlockView(container, {
+    onEdit: editor.edit,
+    logo: __COGITATUM_LOGO__,
+    version: __COGITATUM_VERSION__
+  });
   block.element.classList.add("cog-logseq");
   const abort = new AbortController(), on = { signal: abort.signal };
   // Logseq starts block editing on a press. Preserve default focus and text selection in the preview.
