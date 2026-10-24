@@ -2,6 +2,7 @@
   "name": "@cogitatum/logseq",
   "version": "0.1.0-alpha.2",
   "private": true,
+  "homepage": "https://cogitatum.onesimos.net",
   "type": "module",
   "description": "Read explicit Cogitatum code blocks in Logseq.",
   "license": "MIT",

@@ -25,10 +25,10 @@ await build({
   minify: process.argv.includes("--production")
 });
 // The installable plugin has no development dependencies or paths outside its directory.
-const { name, version, description, license, logseq, icon } = manifest;
+const { name, version, description, license, homepage, logseq, icon } = manifest;
 const pluginIcon = basename(icon);
 copyFileSync(icon, `dist/${pluginIcon}`);
-writeFileSync("dist/package.json", JSON.stringify({ name, version, description, license, main: "index.html", icon: pluginIcon, logseq }, null, 2) + "\n");
+writeFileSync("dist/package.json", JSON.stringify({ name, version, description, license, homepage, main: "index.html", icon: pluginIcon, logseq }, null, 2) + "\n");
 copyFileSync("LICENSE", "dist/LICENSE");
 if (process.argv.includes("--zip")) {
   const path = `dist/${name.replace(/^@/, "").replace("/", "-")}-${version}.zip`;

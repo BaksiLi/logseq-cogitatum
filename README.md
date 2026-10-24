@@ -1,5 +1,7 @@
 # Cogitatum for Logseq
 
+[Cogitatum website and documentation](https://cogitatum.onesimos.net)
+
 This standalone alpha renders explicit `cog` and `cogitatum` code blocks with the shared Cogitatum Reading and Map.
 It does not infer structure from ordinary outline blocks.
 Logseq owns source editing, input methods, undo and saving; the adapter never writes graph contents.
