@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { buildDefine, manifest } from "./build-metadata.mjs";
@@ -25,8 +25,10 @@ await build({
   minify: process.argv.includes("--production")
 });
 // The installable plugin has no development dependencies or paths outside its directory.
-const { name, version, description, license, logseq } = manifest;
-writeFileSync("dist/package.json", JSON.stringify({ name, version, description, license, main: "index.html", logseq }, null, 2) + "\n");
+const { name, version, description, license, logseq, icon } = manifest;
+const pluginIcon = basename(icon);
+copyFileSync(icon, `dist/${pluginIcon}`);
+writeFileSync("dist/package.json", JSON.stringify({ name, version, description, license, main: "index.html", icon: pluginIcon, logseq }, null, 2) + "\n");
 copyFileSync("LICENSE", "dist/LICENSE");
 if (process.argv.includes("--zip")) {
   const path = `dist/${name.replace(/^@/, "").replace("/", "-")}-${version}.zip`;
@@ -35,12 +37,13 @@ if (process.argv.includes("--zip")) {
   const stage = mkdtempSync(join(tmpdir(), "cogitatum-logseq-release-"));
   try {
     const timestamp = new Date("1980-01-01T00:00:00Z");
-    for (const file of ["index.html", "main.js", "package.json", "LICENSE"]) {
+    const files = ["index.html", "main.js", "package.json", pluginIcon, "LICENSE"];
+    for (const file of files) {
       copyFileSync(`dist/${file}`, join(stage, file));
       utimesSync(join(stage, file), timestamp, timestamp);
     }
     rmSync(output, { force: true });
-    execFileSync("zip", ["-q", "-X", output, "index.html", "main.js", "package.json", "LICENSE"], {
+    execFileSync("zip", ["-q", "-X", output, ...files], {
       cwd: stage, env: { ...process.env, TZ: "UTC" }
     });
     process.stdout.write(`Built release ZIP in ${path}.\n`);

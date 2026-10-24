@@ -44,6 +44,6 @@ export const version = {
   label: `Core ${packages.core.version}`,
   detail: `Core ${packages.core.version}\nView ${packages.view.version}\nFormat ${FORMAT_VERSION}\nLogseq plugin ${manifest.version}\nPublic source ${manifest.cogitatumSource.ref}\nHost build ${revision}`
 };
-const logo = "data:image/svg+xml," + encodeURIComponent(readFileSync(new URL("assets/cogitatum.svg", root), "utf8"));
+export const logo = "data:image/svg+xml," + encodeURIComponent(readFileSync(new URL("assets/cog-mark.svg", root), "utf8"));
 export const versionDefine = { __COGITATUM_VERSION__: JSON.stringify(version) };
 export const buildDefine = { ...versionDefine, __COGITATUM_LOGO__: JSON.stringify(logo) };

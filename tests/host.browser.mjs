@@ -8,7 +8,11 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { explainSource } from "@cogitatum/core";
 import { projectReading } from "@cogitatum/view";
-import { buildDefine, version } from "../build-metadata.mjs";
+import { buildDefine, logo as expectedLogo, manifest, version } from "../build-metadata.mjs";
+
+const packaged = JSON.parse(readFileSync(new URL("../dist/package.json", import.meta.url), "utf8"));
+assert.deepEqual(readFileSync(new URL(`../dist/${packaged.icon}`, import.meta.url)),
+  readFileSync(new URL(`../${manifest.icon}`, import.meta.url)), "The portable plugin retains the approved listing icon");
 
 const here = fileURLToPath(new URL("..", import.meta.url));
 const bundle = async contents => (await build({
@@ -134,7 +138,8 @@ try {
   const logo = page.locator(".cog-block-logo");
   assert.equal(await logo.count(), 1);
   assert.equal(await logo.getAttribute("aria-hidden"), "true");
-  assert.equal(await logo.evaluate(element => getComputedStyle(element).maskImage.includes("data:image/svg+xml,")), true);
+  assert.equal(await logo.evaluate(element => element.style.maskImage), `url("${expectedLogo}")`, "The toolbar embeds the exact local Cog SVG");
+  assert.equal(await logo.evaluate(element => getComputedStyle(element).backgroundColor), "rgb(1, 2, 3)", "The filled mark follows host ink");
   const buildInfo = page.locator('.cog-block-version');
   const buildLabel = buildInfo.locator('summary');
   assert.equal(await buildLabel.textContent(), version.label);
@@ -472,9 +477,11 @@ try {
     for (const [key, value] of Object.entries({ "primary-text-color": "#e5e7eb", "secondary-text-color": "#a1a9b2", "primary-background-color": "#182027", "secondary-background-color": "#202b34", "border-color": "#3c4b57", "link-text-color": "#75c5ba" })) document.documentElement.style.setProperty(`--ls-${key}`, value);
   });
   assert.equal(await page.locator(".cog-logseq").evaluate(element => getComputedStyle(element).color), "rgb(229, 231, 235)");
+  assert.equal(await logo.evaluate(element => getComputedStyle(element).backgroundColor), "rgb(229, 231, 235)", "The mark follows dark host ink");
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/map-dark.png` });
   await page.setViewportSize({ width: 360, height: 780 });
   await frames();
+  assert.equal(await logo.isVisible(), true, "The Cog mark remains visible in a narrow pane");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "the mobile card overflows the viewport");
   await buildLabel.click();
   assert.equal(await buildInfo.getAttribute('open'), '');

@@ -30,6 +30,7 @@
     "vitest": "3.2.2"
   },
   "main": "dist/index.html",
+  "icon": "assets/cog-plugin-icon.png",
   "cogitatumSource": {
     "repository": "BaksiLi/cogitatum",
     "ref": "b82d3a0939b9c3cb461215a937b88155e2ef8200",

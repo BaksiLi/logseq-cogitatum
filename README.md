@@ -18,8 +18,8 @@ npm run package
 ```
 
 `package` runs source checks, unit tests, a production build and the browser harness.
-It creates `dist/cogitatum-logseq-0.1.0-alpha.2.zip` with `index.html`, `main.js`, `package.json` and `LICENSE` at its root.
-The same four files in `dist/` form a portable unpacked plugin; no development dependencies are needed at runtime.
+It creates `dist/cogitatum-logseq-0.1.0-alpha.2.zip` with `index.html`, `main.js`, `package.json`, `cog-plugin-icon.png` and `LICENSE` at its root.
+The same five files in `dist/` form a portable unpacked plugin; no development dependencies are needed at runtime.
 In Logseq Developer mode, open Plugins, load the unpacked `dist/` directory and reload Cogitatum after replacing its files.
 If an existing block still shows an older build, leave and reopen its page to remount it.
 These commands do not install or publish the plugin.
@@ -48,8 +48,27 @@ Map positions and view selections are temporary and are never written to the gra
 
 The shared Block owns Reading, Map, diagnostics and expansion.
 The adapter owns host theme variables, event isolation, lifecycle and native source navigation.
-`assets/cogitatum.svg` is the approved Cogitatum mark; build embeds it as a data URL and the shared shell masks it in the host's current ink colour.
-No website assets or private version scripts are read at build time.
+
+## Mark assets
+
+The approved Cog mark in `assets/cog-mark.svg` is the single local source for the Reading/Map toolbar mark.
+`build-metadata.mjs` selects this asset and embeds it as a data URL; `src/mount.ts` passes it to shared Block.
+Shared Block renders a decorative, filled mask in the host's current ink, including dark themes and narrow panes.
+Keep the SVG's `viewBox` and `fill="currentColor"`; do not turn it into a stroked toolbar glyph or hard-code a colour.
+`package.json` selects `assets/cog-plugin-icon.png` through Logseq's `icon` field for the plugin listing.
+Build copies that designer-supplied PNG to the portable plugin root and rewrites the packaged icon path; the ZIP includes it too.
+Builds read only these local snapshots and need no website checkout, private version script or runtime setting.
+
+To sync newly approved designer exports, set the source directory and copy both files without altering them:
+
+```sh
+COG_BRAND_DIR=/path/to/approved/brand
+cp "$COG_BRAND_DIR/cog-mark.svg" assets/cog-mark.svg
+cp "$COG_BRAND_DIR/cog-plugin-icon.png" assets/cog-plugin-icon.png
+npm run package
+```
+
+Commit the assets with any integration changes, then run `npm run package` again to identify the clean host revision in the final artifact.
 
 ## Compatibility and verification
 

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 56 56" fill="currentColor" role="img" aria-labelledby="title">
+  <title id="title">Cog</title>
+  <!-- The language's small mark for hosts and tight places: a point in brackets, as in `[.]`.
+       The solar mark stays the project's; this is the language's. One colour through currentColor. -->
+  <path d="M7 6h19v4.4q-1.6.5-2.3 3.1h-.8q-.5-1.8-2.2-2.1H16v41.2h4.7q1.7-.3 2.2-2.1h.8q.7 2.6 2.3 3.1V58H7zM57 6H38v4.4q1.6.5 2.3 3.1h.8q.5-1.8 2.2-2.1H48v41.2h-4.7q-1.7-.3-2.2-2.1h-.8q-.7 2.6-2.3 3.1V58h19z" />
+  <circle cx="32" cy="32" r="7.5" />
+</svg>
