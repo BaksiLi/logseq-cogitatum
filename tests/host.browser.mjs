@@ -1,26 +1,30 @@
-// Cross-realm harness: the adapter runs in a plugin iframe through the real @logseq/libs Experiments
-// dispatch, while a host page owns React 19 and the DOM, as in Logseq. The host side is a fake of the
-// documented renderer contracts; it is not a running Logseq app.
+// Cross-realm artifact harness: dist/index.html loads the unmodified dist/main.js in a plugin iframe.
+// Only the fake host is bundled here; React 19, renderer/editor contracts and the SDK parent transport
+// stand in for Logseq. Source-only registration contracts remain in src/register.test.ts.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
-import { explainSource } from "@cogitatum/core";
+import { explainSource, FORMAT_VERSION } from "@cogitatum/core";
 import { projectReading } from "@cogitatum/view";
-import { buildDefine, logo as expectedLogo, manifest, version } from "../build-metadata.mjs";
+import { logo as expectedLogo, manifest, version } from "../build-metadata.mjs";
 
 const packaged = JSON.parse(readFileSync(new URL("../dist/package.json", import.meta.url), "utf8"));
+assert.equal(packaged.main, "index.html", "The harness loads the packaged HTML entry");
+assert.equal(packaged.version, manifest.version, "Rebuild dist after changing the plugin version");
 assert.deepEqual(readFileSync(new URL(`../dist/${packaged.icon}`, import.meta.url)),
   readFileSync(new URL(`../${manifest.icon}`, import.meta.url)), "The portable plugin retains the approved listing icon");
 
 const here = fileURLToPath(new URL("..", import.meta.url));
-const bundle = async contents => (await build({
-  stdin: { contents, resolveDir: here, loader: "ts" }, bundle: true, write: false, format: "iife",
-  platform: "browser", loader: { ".css": "text" }, define: { "process.env.NODE_ENV": '"production"', ...buildDefine }, logLevel: "silent"
-})).outputFiles[0].text;
-
-const host = await bundle(`
+const shippedMain = readFileSync(new URL("../dist/main.js", import.meta.url));
+const artifactHash = createHash("sha256").update(shippedMain).digest("hex");
+// Build the React host only. Adapter code, SDK, View and CSS must all come from dist/main.js.
+const host = (await build({
+  bundle: true, write: false, format: "iife", platform: "browser",
+  define: { "process.env.NODE_ENV": '"production"' }, logLevel: "silent",
+  stdin: { resolveDir: here, contents: `
 import * as React from "react"; import { flushSync } from "react-dom"; import { createRoot } from "react-dom/client";
 window.React = React;
 const fenced = new Map(), blocks = new Map(), log = window.hostLog = { blockPresses: 0, keys: [], unregistered: 0, registrations: [] };
@@ -76,54 +80,85 @@ window.hostRender = (kind, props) => flushSync(() => {
 });
 window.hostMatches = props => blocks.get("cogitatum-code").when(props);
 window.hostUnmount = () => flushSync(() => root.unmount());
-const frame = document.createElement("iframe"); frame.src = "/plugin.html"; frame.hidden = true; document.body.append(frame);
-`);
-const plugin = await bundle(`
-import "@logseq/libs";
-import viewStyle from "@cogitatum/view/style.css";
-import logseqStyle from "./src/logseq.css";
-import { registerCogitatum } from "./src/register.ts";
-// ready() would fill baseInfo after the host handshake; the Experiments dispatch below is the real SDK's.
-logseq.baseInfo.id = "cogitatum";
-let unload;
-const api = {
-  Experiments: logseq.Experiments,
-  provideStyle({ key, style }) { const element = top.document.createElement("style"); element.dataset.key = key; element.textContent = style; top.document.head.append(element); },
-  beforeunload(callback) { unload = callback; }
-};
-top.pluginStatus = registerCogitatum(api, viewStyle + "\\n" + logseqStyle);
-top.pluginUnload = () => unload();
-`);
+// Minimal parent side of the installed SDK's Postmate transport. The plugin performs its own
+// ready(), metadata call, provideStyle() and beforeunload; no plugin methods are patched.
+const frame = document.createElement("iframe"), messageType = "application/x-postmate-v1+json";
+const send = message => frame.contentWindow.postMessage({ type: messageType, ...message }, location.origin);
+const call = (property, data) => send({ postmate: "call", property, data });
+let requestId = 0;
+const pending = new Map();
+window.pluginUnload = () => new Promise((resolve, reject) => {
+  const uid = ++requestId; pending.set(uid, { resolve, reject });
+  send({ postmate: "request", property: "#lspmsg#beforeunload#", args: [{}], uid });
+});
+window.addEventListener("message", event => {
+  if (event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.type !== messageType) return;
+  const message = event.data;
+  if (message.postmate === "handshake-reply") {
+    log.handshakes = (log.handshakes ?? 0) + 1;
+    call("#lspmsg#ready#", { pid: "cogitatum" });
+  } else if (message.postmate === "reply") {
+    const request = pending.get(message.uid);
+    if (!request) throw new Error("Unexpected SDK reply");
+    pending.delete(message.uid);
+    if (message.error) request.reject(new Error(String(message.error))); else request.resolve(message.value);
+  } else if (message.postmate === "emit" && message.value?.name === "#lspmsg#cogitatum") {
+    const { type, payload } = message.value.data;
+    if (type === "api:call" && payload.method === "setSDKMetadata") {
+      log.sdkMetadata = payload.args[0];
+      call("#lspmsg#reply#", { _sync: payload._sync, result: null });
+    } else if (type === "provider:style") {
+      const element = document.createElement("style");
+      element.dataset.key = payload.key; element.textContent = payload.style; document.head.append(element);
+    } else throw new Error("Unexpected SDK host call: " + type);
+  } else throw new Error("Unexpected SDK message: " + message.postmate);
+});
+frame.addEventListener("load", () => send({
+  postmate: "handshake", model: { baseInfo: { id: "cogitatum", name: "Cogitatum" } }
+}), { once: true });
+frame.src = "/dist/index.html"; frame.hidden = true; document.body.append(frame);
+` }
+})).outputFiles[0].text;
 
 const files = {
   "/host.html": ["text/html", `<!doctype html><style>:root{--ls-primary-text-color:rgb(1, 2, 3)} body{margin:16px;font:15px/1.5 sans-serif} svg{pointer-events:none} #graph{width:800px;max-width:100%} .ui-fenced-code-wrap:not(.is-active) .ui-fenced-code-editor{display:none!important} .ui-fenced-code-result{position:relative} textarea{width:100%;min-height:200px} .actions{position:absolute;top:8px;right:4px;z-index:2;display:flex} .actions button{box-sizing:border-box;width:28px;height:28px}</style><div id="graph"></div><script src="/host.js"></script>`],
   "/host.js": ["text/javascript", host],
-  "/plugin.html": ["text/html", `<!doctype html><script src="/plugin.js"></script>`],
-  "/plugin.js": ["text/javascript", plugin],
   "/dist/index.html": ["text/html", readFileSync(new URL("../dist/index.html", import.meta.url), "utf8")],
-  "/dist/main.js": ["text/javascript", readFileSync(new URL("../dist/main.js", import.meta.url), "utf8")]
+  "/dist/main.js": ["text/javascript", shippedMain]
 };
 const reading = readFileSync(new URL("./fixtures/api-timeout.cog.md", import.meta.url), "utf8");
 const linked = readFileSync(new URL("./fixtures/linked.cog.md", import.meta.url), "utf8");
+assert.equal(FORMAT_VERSION, "0.6.0");
+for (const fixture of [reading, linked]) assert.deepEqual(explainSource(fixture, "document").diagnostics, []);
 const broken = "- [C] Fine.\n- [Z] Broken mark.\n- [. use @nowhere] Dangling.\n";
 const screenshotDir = process.env.COGITATUM_SCREENSHOT_DIR;
 if (screenshotDir) mkdirSync(screenshotDir, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });
-const errors = [];
+const errors = [], artifactRequests = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
   page.on("pageerror", error => { errors.push(error.message); process.stderr.write(`Browser error: ${error.message}\n`); });
-  await page.route("http://logseq.test/**", route => {
-    const file = files[new URL(route.request().url()).pathname];
-    return file ? route.fulfill({ contentType: `${file[0]}; charset=utf-8`, body: file[1] }) : route.fulfill({ status: 404 });
+  // ready() catches initialization failures itself, so pageerror alone cannot detect them.
+  page.on("console", message => { if (message.type() === "error" || message.type() === "warning") errors.push(message.text()); });
+  await page.route("**/*", route => {
+    const url = new URL(route.request().url());
+    const file = url.origin === "http://logseq.test" ? files[url.pathname] : undefined;
+    if (!file) {
+      errors.push(`Unexpected harness request: ${url.href}`);
+      return route.abort();
+    }
+    if (url.pathname.startsWith("/dist/")) artifactRequests.push(url.pathname);
+    return route.fulfill({ contentType: `${file[0]}; charset=utf-8`, body: file[1] });
   });
   await page.goto("http://logseq.test/host.html");
-  await page.waitForFunction(() => window.pluginStatus);
+  await page.waitForFunction(() => window.hostLog.registrations.length === 3 && document.querySelector('style[data-key="cogitatum-reading"]'));
   const frames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-  // Registration through the real SDK dispatch.
-  assert.deepEqual(await page.evaluate(() => window.pluginStatus), { fencedLanguages: ["cog", "cogitatum"], blockRenderer: true, unsupported: [] });
+  // The shipped HTML and main entry complete ready() through the bundled SDK.
+  assert.deepEqual(artifactRequests, ["/dist/index.html", "/dist/main.js"]);
+  assert.equal(await page.evaluate(() => window.hostLog.handshakes), 1);
+  assert.deepEqual(await page.evaluate(() => window.hostLog.sdkMetadata), { version: manifest.devDependencies["@logseq/libs"], runtime: "js" });
   assert.deepEqual(await page.evaluate(() => window.hostLog.registrations), [
     { pid: "cogitatum", lang: "cog", keys: ["render"] },
     { pid: "cogitatum", lang: "cogitatum", keys: ["render"] },
@@ -197,11 +232,11 @@ try {
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.waitForSelector('[data-cog-editing="true"]');
   assert.equal(await page.getByRole('textbox', { name: 'Native source' }).inputValue(), reading);
-  assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.at(-1).from.line), 8);
+  assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.at(-1).from.line), 10);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   assert.equal(await page.evaluate(() => window.nativeEditorLog.toggles), 1);
   assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), [true], 'Native wrapping should be enabled once for parallel editing');
-  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("tab", { name: "Map", exact: true }).click();
   await frames();
   assert.equal(await page.locator('.cog-graph').evaluate(element => getComputedStyle(element).pointerEvents), 'auto', "Logseq's global SVG rule disabled the Map");
   const mapNode = page.locator('.cog-graph .cog-node[aria-pressed="true"]');
@@ -209,20 +244,26 @@ try {
   const acqFailure = page.locator('.cog-graph .point[aria-label*="Between 02:00 and 03:00"]');
   assert.equal(await page.locator('.cog-graph .point[aria-label*="A leak would keep"]').getAttribute("data-related"), "false");
   assert.equal(await acqFailure.getAttribute("data-related"), "true");
-  assert.match(await page.locator(".cog-block-detail-text").textContent(), /Doubling the pool size will prevent these timeouts/);
+  assert.equal(await acqFailure.getAttribute("aria-pressed"), "true");
+  assert.match(await page.locator(".cog-block-detail-text").textContent(), /Between 02:00 and 03:00 the service logged repeated connection-acquisition failures/);
+  await page.getByRole("tab", { name: "Strands", exact: true }).click();
+  await frames();
+  assert.equal(await page.locator(".cog-logseq").getAttribute("data-mode"), "strands");
+  assert.equal(await page.locator('.cog-strands-row[data-selected="true"]').count(), 1);
+  await page.getByRole("tab", { name: "Map", exact: true }).click();
   await page.getByRole("button", { name: "Read passage", exact: true }).click();
   const selectedUse = page.locator(".cog-reading-select[aria-pressed='true']");
-  assert.equal(await selectedUse.evaluate(element => element.closest(".cog-reading-row")?.dataset.line), "9");
+  assert.equal(await selectedUse.evaluate(element => element.closest(".cog-reading-row")?.dataset.line), "11");
   assert.equal(await selectedUse.evaluate(element => element.closest(".cog-reading-row") === document.activeElement), true);
 
-  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("tab", { name: "Map", exact: true }).click();
   const firstMark = page.locator(".cog-graph .cog-node.point").first();
   const position = await firstMark.getAttribute("transform");
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await frames();
   assert.notEqual(await firstMark.getAttribute("transform"), position);
-  await page.getByRole("button", { name: "Fit", exact: true }).click();
-  await page.getByRole("button", { name: "Arrange", exact: true }).click();
+  await page.getByRole("button", { name: "Fit map", exact: true }).click();
+  await page.getByRole("button", { name: "Arrange map", exact: true }).click();
   await frames();
   assert.equal(await page.evaluate(() => window.hostLog.blockPresses), 0);
 
@@ -252,20 +293,22 @@ try {
   // Enter opens the same native buffer without replacing the Map.
   await firstMark.focus(); await page.keyboard.press("Enter");
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Native source');
-  assert.equal(await page.getByRole("button", { name: "Map", exact: true }).getAttribute("aria-pressed"), "true");
+  assert.equal(await page.getByRole("tab", { name: "Map", exact: true }).getAttribute("aria-selected"), "true");
 
   // Source edits update the same view instance in place; compiler diagnostics stay visible.
   const mounted = await page.locator(".cog-logseq").elementHandle();
   await page.getByRole('textbox', { name: 'Native source' }).fill(broken);
   await frames();
-  assert.equal(await page.getByRole("button", { name: "Map", exact: true }).getAttribute("aria-pressed"), "true");
+  assert.equal(await page.getByRole("tab", { name: "Map", exact: true }).getAttribute("aria-selected"), "true");
   assert.equal(await page.locator(".cog-logseq").count(), 1);
   assert.equal(await mounted.evaluate(element => element.isConnected), true);
   assert.equal(await rows.count(), 3);
   assert.match(await page.locator(".cog-reading-diagnostics summary").textContent(), /error/);
-  assert.equal(await page.locator('.cog-reading-row[data-line="3"] .cog-reading-diagnostic').textContent(), "UNKNOWN_POINT_REFERENCE");
+  const unknownReference = page.locator('.cog-reading-row[data-line="3"] .cog-reading-diagnostic');
+  assert.equal(await unknownReference.textContent(), "Unknown point reference");
+  assert.equal(await unknownReference.getAttribute("data-codes"), "UNKNOWN_POINT_REFERENCE");
   assert.equal(await page.locator(".cog-block-issues").isVisible(), true);
-  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("tab", { name: "Map", exact: true }).click();
   assert.equal(await page.locator('.cog-block-detail').isHidden(), true, "stale selection survived a source edit");
   await page.locator(".cog-block-issues").click();
   assert.equal(await page.locator(".cog-reading-diagnostics").isVisible(), true);
@@ -379,6 +422,21 @@ try {
     }
   }
 
+  const multilineSource = "- [C] Claim.\n  - [G] A reason.\n    Continued wording.";
+  await page.evaluate(content => {
+    window.hostMount(); window.hostRender("fenced", { lang: "cog", content });
+  }, multilineSource);
+  const multilineRow = page.locator('.cog-reading-row[data-line="2"]');
+  await multilineRow.click();
+  await multilineRow.press("Enter");
+  await page.waitForSelector('[data-cog-editing="true"]');
+  assert.equal(await page.getByRole("textbox", { name: "Native source" }).inputValue(), multilineSource);
+  assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.selections.at(-1)), {
+    from: { line: 1, ch: 4 },
+    to: { line: 2, ch: "    Continued wording.".length }
+  });
+  await page.evaluate(() => window.hostUnmount());
+
   // DB code block: the host-side predicate matches only Cogitatum code blocks.
   const props = lang => ({ blockId: "b1", uuid: "b1", content: "- [C] From a DB code block.", properties: { "logseq.property.node/display-type": "code", "logseq.property.code/lang": lang } });
   assert.deepEqual(await page.evaluate(([cog, js]) => [window.hostMatches(cog), window.hostMatches(js)], [props("cog"), props("js")]), [true, false]);
@@ -397,7 +455,7 @@ try {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.evaluate(content => { document.querySelector("#graph").style.width = "800px"; window.hostMount(); window.hostRender("fenced", { lang: "cogitatum", content }); }, linked);
-  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("tab", { name: "Map", exact: true }).click();
   await page.evaluate(() => document.fonts.ready);
   await frames();
   assert.equal(await page.locator('.cog-graph .cog-junction-node').count(), 1);
@@ -433,14 +491,14 @@ try {
     requestAnimationFrame(sample);
   }));
   await dragGround();
-  await page.getByRole('button', { name: 'Arrange', exact: true }).click();
+  await page.getByRole('button', { name: 'Arrange map', exact: true }).click();
   const animated = await samplePositions();
   assert.ok(new Set(animated).size > 2, 'Arrange did not interpolate the displaced nodes');
 
   // Reduced motion keeps direct manipulation but restores the layout without interpolation.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await dragGround(true);
-  await page.getByRole('button', { name: 'Arrange', exact: true }).click();
+  await page.getByRole('button', { name: 'Arrange map', exact: true }).click();
   const immediate = await samplePositions();
   assert.equal(new Set(immediate).size, 1, 'Arrange animated despite reduced motion');
   assert.equal(immediate[0], animated.at(-1), 'Arrange did not restore the original layout');
@@ -455,7 +513,7 @@ try {
   assert.notEqual(await ground.getAttribute('transform'), beforePan);
   assert.equal(await ground.getAttribute('aria-pressed'), 'true');
   assert.equal(await page.evaluate(() => window.hostLog.blockPresses), 0);
-  await page.getByRole('button', { name: 'Fit', exact: true }).click();
+  await page.getByRole('button', { name: 'Fit map', exact: true }).click();
   await frames();
   // A delayed host edit may arrive while the pointer still holds an old revision.
   const interrupted = await labelCenter();
@@ -492,13 +550,13 @@ try {
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/version-mobile-closed.png` });
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/map-mobile.png` });
   await page.getByRole("button", { name: "Expand", exact: true }).click();
-  await page.getByRole("button", { name: "Fit", exact: true }).click();
+  await page.getByRole("button", { name: "Fit map", exact: true }).click();
   await frames();
   assert.equal(await page.locator("dialog[open]").count(), 1);
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/map-mobile-expanded.png` });
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector("dialog"));
-  await page.getByRole("button", { name: "Reading", exact: true }).click();
+  await page.getByRole("tab", { name: "Read", exact: true }).click();
   await frames();
   assert.equal(await rows.first().evaluate(element => getComputedStyle(element).animationName), "none");
   assert.match(await rows.first().textContent(), /9 不是素數/);
@@ -509,13 +567,9 @@ try {
   await page.evaluate(async () => { await window.pluginUnload(); await window.pluginUnload(); });
   assert.equal(await page.evaluate(() => window.hostLog.unregistered), 3);
 
-  // The shipped bundle loads in a plugin iframe without throwing before the host handshake.
-  await page.evaluate(() => new Promise(resolve => {
-    const frame = document.createElement("iframe"); frame.src = "/dist/index.html"; frame.onload = resolve; document.body.append(frame);
-  }));
-  await page.waitForTimeout(300);
   assert.deepEqual(errors, []);
-  process.stdout.write("Logseq host harness passed: exact diagnostic Source and expanded native navigation; 16 simulated getOption/setOption/refresh/selection callback invalidations; registration, Reading/Map, source revision, native cleanup, pointer, narrow view and unload.\n");
+  process.stdout.write("Logseq shipped-artifact host harness passed: exact diagnostic Source and expanded native navigation; 16 simulated getOption/setOption/refresh/selection callback invalidations; registration, Reading/Map/Strands, local-use selection, source revision, native cleanup, pointer, narrow view and SDK unload.\n");
+  process.stdout.write(`dist/main.js SHA-256 ${artifactHash}\n`);
 } finally {
   await browser.close();
 }

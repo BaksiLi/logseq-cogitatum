@@ -1,8 +1,8 @@
 # Cogitatum for Logseq
 
-[Cogitatum website and documentation](https://cogitatum.onesimos.net)
+[Cogitatum website and documentation](https://onesimos.org)
 
-This standalone alpha renders explicit `cog` and `cogitatum` code blocks with the shared Cogitatum Reading and Map.
+This standalone alpha renders explicit `cog` and `cogitatum` code blocks with the shared Cogitatum Reading, Map and Strands.
 It does not infer structure from ordinary outline blocks.
 Logseq owns source editing, input methods, undo and saving; the adapter never writes graph contents.
 
@@ -20,18 +20,26 @@ npm run package
 ```
 
 `package` runs source checks, unit tests, a production build and the browser harness.
-It creates `dist/cogitatum-logseq-0.1.0-alpha.2.zip` with `index.html`, `main.js`, `package.json`, `cog-plugin-icon.png` and `LICENSE` at its root.
+It creates `dist/cogitatum-logseq-0.1.0-alpha.4.zip` with `index.html`, `main.js`, `package.json`, `cog-plugin-icon.png` and `LICENSE` at its root.
 The same five files in `dist/` form a portable unpacked plugin; no development dependencies are needed at runtime.
 In Logseq Developer mode, open Plugins, load the unpacked `dist/` directory and reload Cogitatum after replacing its files.
 If an existing block still shows an older build, leave and reopen its page to remount it.
 These commands do not install or publish the plugin.
 
-The adapter version is `0.1.0-alpha.2`; Core, View and Format remain `0.5.0`.
+The adapter version is `0.1.0-alpha.4`; Core and View are `0.6.1`; Format remains `0.6.0`.
+Core and View are vendored from the reviewed public source commit recorded in `package.json`; no registry lookup is needed to build.
+This adopts the same shared rendering and interaction implementation used by the Playground.
 `package.json` records the full reviewed public source commit and both vendored archive SHA-256 digests.
 Checks validate those archives and the installed lockfile integrity, so unchanged package versions cannot silently select a different source build.
 Commit before the final production build: the information disclosure shows the public pin and clean adapter revision.
 Source archives without their own Git root report `source archive`, including when extracted inside another checkout.
 Retain the ZIP digest to identify the exact tested artifact.
+
+Retained 0.5 notes require source migration before recompilation.
+Replace `[linked]` with `[_ +> ^]` and make its direct sources neutral declarations or uses.
+Replace `/>` with `-> ^/` when challenging the locally exposed step, and named `repliesTo` with `respondsTo`.
+A Claim below a Question needs an explicit `answers` clause when it is intended as an answer.
+See the [complete migration reference](https://onesimos.org/docs/syntax#from-published-05); the adapter never rewrites graph contents automatically.
 
 CI uses locked installs on Node 22 and 24.
 Node 22 runs source checks, tests and production build; Node 24 installs Chromium once and runs the full package command before uploading the ZIP.
@@ -41,6 +49,8 @@ Node 22 runs source checks, tests and production build; Node 24 installs Chromiu
 Reading preserves source order, unmarked body text, local occurrences and literal note subtrees.
 It currently presents Markdown wording as plain text; native rich Markdown rendering is not implemented by this adapter.
 Map shows compiled relations with Fit, zoom, Arrange, selection and passage navigation.
+Strands follows the supporting paths into a Point and places objections on the Point or step they address.
+All three modes share the selected source occurrence.
 Selecting an occurrence and pressing Enter, or choosing a diagnostic's Source action, selects its exact span in the native code editor.
 Edit reuses that editor beside the preview on wide blocks and above it on narrow blocks.
 Source changes update the preview; replaced or destroyed views cancel pending navigation.
@@ -48,7 +58,7 @@ The native bridge checks current source and editor identity before selecting or 
 Expand moves the same view into a modal; source navigation closes it before native focus.
 Map positions and view selections are temporary and are never written to the graph.
 
-The shared Block owns Reading, Map, diagnostics and expansion.
+The shared Block owns Reading, Map, Strands, diagnostics and expansion.
 The adapter owns host theme variables, event isolation, lifecycle and native source navigation.
 
 ## Mark assets

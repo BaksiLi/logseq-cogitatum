@@ -1,6 +1,7 @@
 /* Host tokens and fenced-editor layout; the shared View owns the preview shell. */
 .cog-logseq {
   --cog-ink: var(--ls-primary-text-color, #18242a);
+  --cog-ui: var(--ls-font-family, system-ui, sans-serif);
   --cog-surface: var(--ls-primary-background-color, #fbfcf8);
   --cog-canvas: var(--ls-secondary-background-color, #f1f2ee);
   --cog-muted: var(--ls-secondary-text-color, #5a666b);

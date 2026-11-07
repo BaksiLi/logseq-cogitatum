@@ -1,8 +1,8 @@
 {
   "name": "@cogitatum/logseq",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.4",
   "private": true,
-  "homepage": "https://cogitatum.onesimos.net",
+  "homepage": "https://onesimos.org",
   "type": "module",
   "description": "Read explicit Cogitatum code blocks in Logseq.",
   "license": "MIT",
@@ -18,8 +18,8 @@
     "title": "Cogitatum"
   },
   "dependencies": {
-    "@cogitatum/core": "file:vendor/cogitatum-core-0.5.0.tgz",
-    "@cogitatum/view": "file:vendor/cogitatum-view-0.5.0.tgz"
+    "@cogitatum/core": "file:vendor/cogitatum-core-0.6.1.tgz",
+    "@cogitatum/view": "file:vendor/cogitatum-view-0.6.1.tgz"
   },
   "devDependencies": {
     "@logseq/libs": "0.3.4",
@@ -34,10 +34,10 @@
   "icon": "assets/cog-plugin-icon.png",
   "cogitatumSource": {
     "repository": "BaksiLi/cogitatum",
-    "ref": "b82d3a0939b9c3cb461215a937b88155e2ef8200",
+    "ref": "c5761459023926e0b73c04897eb98b220d576aa7",
     "sha256": {
-      "core": "6d84c176167658072167bcff552d7d5fdfe2402384e7a95cce641ef71301c769",
-      "view": "18eba8db317cff3b5328db64c379c12edd76c10caca2054667638445aaf804ca"
+      "core": "84c9cd315ef18199fee27877d326d631c09efe47d411e325e71da5741c79f52a",
+      "view": "ad8dc19f284a7a054701c79d55edc51e2ced034c93517ea2241bfb2e029a93c2"
     }
   },
   "engines": {
