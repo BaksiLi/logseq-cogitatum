@@ -12,12 +12,17 @@ type NativeEditor = AssistedEditor & {
 
 /**
  * Logseq's fenced renderer exposes only content, so reuse its existing editor and toggle.
- * While editing beside the preview, the editor wraps, is highlighted, and leads the preview with its cursor;
- * all three are released together.
+ * Whenever the host shows that editor beside the preview, however it was opened, the editor wraps,
+ * is highlighted, and leads the preview with its cursor; all three are released together when it closes.
  */
 export function createSourceEditor(container: HTMLElement, onCursor: (line: number) => void) {
   let parallel: { wrap: HTMLElement; editor: NativeEditor; original: boolean; release?: () => void } | undefined;
+  let destroyed = false, frame = 0;
+  const win = container.ownerDocument.defaultView!;
+  const host = container.closest<HTMLElement>(".ui-fenced-code-wrap");
   const normal = (text: string) => text.replace(/\r\n/g, "\n").replace(/\n$/, "");
+  const editorIn = (wrap: HTMLElement) =>
+    (wrap.querySelector(".CodeMirror") as (HTMLElement & { CodeMirror?: NativeEditor }) | null)?.CodeMirror;
   function restoreParallelEditing() {
     if (!parallel) return;
     const previous = parallel;
@@ -27,6 +32,35 @@ export function createSourceEditor(container: HTMLElement, onCursor: (line: numb
     previous.release?.();
     previous.editor.setOption("lineWrapping", previous.original);
   }
+  /** Adopt the host's open editor. `valid` is rechecked after each native call, which may close or replace it. */
+  function attach(wrap: HTMLElement, editor: NativeEditor, valid: () => boolean): boolean {
+    if (parallel?.wrap === wrap && parallel.editor === editor) return true;
+    restoreParallelEditing();
+    if (!valid()) return false;
+    const original = editor.getOption("lineWrapping");
+    if (!valid()) return false;
+    const session: NonNullable<typeof parallel> = parallel = { wrap, editor, original };
+    editor.setOption("lineWrapping", true);
+    if (!valid() || parallel !== session) return false;
+    session.release = assistEditor(editor, onCursor);
+    if (!valid() || parallel !== session) return false;
+    wrap.dataset.cogEditing = "true";
+    // The editor column just narrowed and began wrapping.
+    editor.refresh();
+    return valid();
+  }
+  const open = (wrap: HTMLElement) => !destroyed && container.closest(".ui-fenced-code-wrap") === wrap && wrap.classList.contains("is-active");
+  /** Follow the host toggle: Logseq may create its editor a frame or two after the fence opens. */
+  function track() {
+    win.cancelAnimationFrame(frame);
+    if (!host || !open(host)) { restoreParallelEditing(); return; }
+    frame = win.requestAnimationFrame(() => { frame = win.requestAnimationFrame(() => {
+      const editor = editorIn(host);
+      if (editor && open(host)) attach(host, editor, () => open(host) && editorIn(host) === editor);
+    }); });
+  }
+  const observer = host ? new win.MutationObserver(track) : undefined;
+  if (host) { observer!.observe(host, { attributes: true, attributeFilter: ["class"] }); track(); }
   return {
     /** The one-based cursor line, while editing beside the preview and only if the editor holds `source`. */
     cursorLine(source: string): number | undefined {
@@ -40,7 +74,6 @@ export function createSourceEditor(container: HTMLElement, onCursor: (line: numb
       if (!wrap || !toggle) throw new Error("This Logseq renderer does not expose a parallel editor. Use the block's native Edit action.");
       if (!wrap.classList.contains("is-active")) toggle.click();
       if (signal.aborted || !container.isConnected) return;
-      const win = container.ownerDocument.defaultView!;
       await new Promise(resolve => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)));
       if (signal.aborted || !container.isConnected) return;
       const native = wrap.querySelector(".CodeMirror") as (HTMLElement & { CodeMirror?: NativeEditor }) | null;
@@ -56,21 +89,8 @@ export function createSourceEditor(container: HTMLElement, onCursor: (line: numb
         return true;
       };
       if (!validateTarget()) return;
-      if (parallel?.editor !== editor || parallel.wrap !== wrap) {
-        restoreParallelEditing();
-        if (!validateTarget()) return;
-        const original = editor.getOption("lineWrapping");
-        if (!validateTarget()) return;
-        parallel = { wrap, editor, original };
-        editor.setOption("lineWrapping", true);
-        if (!validateTarget()) return;
-        parallel.release = assistEditor(editor, onCursor);
-        if (!validateTarget()) return;
-      }
-      wrap.dataset.cogEditing = "true";
-      // Native callbacks can cancel the render, replace its editor, or change its buffer.
-      editor.refresh();
-      if (!validateTarget()) return;
+      // Usually the toggle tracker attached already; attaching again is a no-op.
+      if (!attach(wrap, editor, validateTarget) || !validateTarget()) return;
       if (span) editor.setSelection(
         { line: span.startLine - 1, ch: span.startColumn - 1 },
         { line: span.endLine - 1, ch: span.endColumn - 1 }
@@ -78,6 +98,10 @@ export function createSourceEditor(container: HTMLElement, onCursor: (line: numb
       if (!validateTarget()) return;
       editor.focus();
     },
-    destroy: restoreParallelEditing
+    destroy() {
+      destroyed = true;
+      observer?.disconnect(); win.cancelAnimationFrame(frame);
+      restoreParallelEditing();
+    }
   };
 }

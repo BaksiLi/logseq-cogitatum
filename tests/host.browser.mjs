@@ -428,13 +428,19 @@ try {
       const after = await page.evaluate(() => ({
         selected: window.nativeEditorLog.selections.length - window.nativeBoundary.selections,
         focused: window.nativeEditorLog.focuses - window.nativeBoundary.focuses,
-        actions: window.nativeEditorLog.actions.slice(window.nativeBoundary.actions).filter(action => action !== 'setOption')
+        actions: window.nativeEditorLog.actions.slice(window.nativeBoundary.actions)
       }));
-      assert.deepEqual(after, { selected: 0, focused: 0, actions: [] }, boundary + '-' + invalidation + ': no subsequent native mutation or focus; wrapping cleanup is allowed');
+      // A cancelled request never selects or focuses. Unless the preview itself went away, the fence stays open,
+      // so the toggle tracker still adopts its current editor; otherwise only wrapping restoration may follow.
+      const fenceOpen = invalidation !== 'abort';
+      after.actions = after.actions.filter(action => !(fenceOpen ? ['getOption', 'setOption', 'refresh'] : ['setOption']).includes(action));
+      assert.deepEqual(after, { selected: 0, focused: 0, actions: [] }, boundary + '-' + invalidation + ': no subsequent selection or focus');
       assert.equal(await page.evaluate(() => window.nativeEditorLog.selections.length), boundary === 'selection' ? 1 : 0);
       await page.evaluate(() => { window.onNativeEditorAction = undefined; window.hostUnmount(); });
       assert.equal(await page.locator('[data-cog-editing]').count(), 0, 'Cleanup never resurrects parallel editing after a native callback');
-      assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), boundary === 'getOption' ? [] : [true, false], 'Wrapping acquisition and restoration each occur at most once');
+      assert.deepEqual(await page.evaluate(() => window.nativeEditorLog.wrapping), boundary === 'getOption' && !fenceOpen ? []
+        // A replaced editor is restored, and its replacement adopted and later restored.
+        : invalidation === 'editor' && boundary !== 'getOption' ? [true, false, true, false] : [true, false], boundary + '-' + invalidation + ': wrapping acquisition and restoration each occur at most once');
     }
   }
 
@@ -464,6 +470,26 @@ try {
   await page.evaluate(() => window.hostUnmount());
   assert.deepEqual(await page.evaluate(() => ({ marks: window.nativeEditorLog.marks, handlers: document.querySelector(".CodeMirror")?.cogHandlers?.size ?? 0 })),
     { marks: 0, handlers: 0 }, "Unmount releases highlighting and cursor following with wrapping");
+
+  // Logseq's own toggle opens the same editor beside the preview; it is assisted the same way, and closing it releases everything.
+  await page.evaluate(content => {
+    window.hostMount(); window.hostRender("fenced", { lang: "cog", content });
+    window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [], focuses: 0, actions: [], marks: 0 };
+  }, multilineSource);
+  await page.getByRole("button", { name: "<>" }).click();
+  await page.waitForSelector('[data-cog-editing="true"]');
+  assert.ok(await page.evaluate(() => window.nativeEditorLog.marks) > 0, "The host toggle's editor is highlighted");
+  await page.evaluate(() => window.nativeCursor(2));
+  assert.equal(await page.locator('.cog-reading-row[data-line="2"]').getAttribute("data-selected"), "true", "The host toggle's editor leads the preview");
+  assert.deepEqual(await page.evaluate(() => ({ selections: window.nativeEditorLog.selections.length, focuses: window.nativeEditorLog.focuses })),
+    { selections: 0, focuses: 0 }, "Opening from the host neither selects nor takes focus");
+  await page.getByRole("button", { name: "<>" }).click();
+  await frames();
+  assert.deepEqual(await page.evaluate(() => ({ marks: window.nativeEditorLog.marks, handlers: document.querySelector(".CodeMirror").cogHandlers?.size ?? 0,
+    wrapping: window.nativeEditorLog.wrapping, editing: document.querySelector("[data-cog-editing]") !== null })),
+    { marks: 0, handlers: 0, wrapping: [true, false], editing: false }, "Closing the host editor releases wrapping, highlighting and following");
+  // The host's own toggle is a block press; later checks count only presses through the preview.
+  await page.evaluate(() => { window.hostUnmount(); window.hostLog.blockPresses = 0; });
 
   // DB code block: the host-side predicate matches only Cogitatum code blocks.
   const props = lang => ({ blockId: "b1", uuid: "b1", content: "- [C] From a DB code block.", properties: { "logseq.property.node/display-type": "code", "logseq.property.code/lang": lang } });
