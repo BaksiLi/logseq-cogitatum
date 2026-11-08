@@ -15,7 +15,8 @@
   },
   "logseq": {
     "id": "cogitatum",
-    "title": "Cogitatum"
+    "title": "Cogitatum",
+    "supportsDB": false
   },
   "dependencies": {
     "@cogitatum/core": "file:vendor/cogitatum-core-0.6.2.tgz",

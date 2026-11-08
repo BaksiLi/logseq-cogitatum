@@ -3,6 +3,7 @@
 [Cogitatum website and documentation](https://onesimos.org)
 
 This standalone alpha renders explicit `cog` and `cogitatum` code blocks with the shared Cogitatum Reading, Map and Strands.
+It supports Logseq 0.10 ("OG") with Markdown file graphs; Logseq 2.x DB graphs are not supported.
 It does not infer structure from ordinary outline blocks.
 Logseq owns source editing, input methods, undo and saving; the adapter never writes graph contents.
 While the code editor is open beside the preview, undo and redo keys reach only that editor's own history:
@@ -96,8 +97,9 @@ Commit the assets with any integration changes, then run `npm run release` again
 The desktop compatibility target is Logseq 0.10.15 with Markdown graphs.
 Startup probes the host's Experiments APIs and reports unavailable registration methods in the developer console.
 Markdown fences use `Experiments.registerFencedCodeRenderer`.
-2.x DB code blocks can use `Experiments.registerBlockRenderer` when available, but native parallel editing on DB graphs is unverified.
-Both APIs are experimental and may change; Marketplace compatibility and publication remain separate decisions.
+DB graphs store code as typed blocks rather than fences, and the native editing bridge targets 0.10's fenced-code editor,
+so the manifest declares `supportsDB: false` instead of shipping an unverified path.
+The API is experimental and may change; Marketplace compatibility and publication remain separate decisions.
 
 The fence renderer supplies text without block identity.
 `src/edit.ts` isolates the bridge to the existing fenced-code toggle and CodeMirror instance.
@@ -112,7 +114,7 @@ Presses consumed by Reading stay inside it so Logseq does not enter block editin
 Unit tests exercise registration, API detection and unload.
 The cross-realm browser harness uses real Core/View and the Logseq SDK with a React stand-in for host registration, rendering and native editing.
 It covers exact source spans, stale/cancelled navigation, lifecycle cleanup, diagnostics, Map controls, pointer gestures, themes, reduced motion, narrow panes, and production bundle loading.
-It is not the running Logseq app and cannot establish native desktop, mobile or DB-graph compatibility.
+It is not the running Logseq app and cannot establish native desktop or mobile compatibility.
 Set `COGITATUM_SCREENSHOT_DIR` to retain browser screenshots.
 Record native checks and exact artifact hashes outside tracked source, such as ignored `artifacts/`, so recording evidence does not change the build identity.
 

@@ -27,11 +27,10 @@ const host = (await build({
   stdin: { resolveDir: here, contents: `
 import * as React from "react"; import { flushSync } from "react-dom"; import { createRoot } from "react-dom/client";
 window.React = React;
-const fenced = new Map(), blocks = new Map(), log = window.hostLog = { blockPresses: 0, keys: [], unregistered: 0, registrations: [] };
+const fenced = new Map(), log = window.hostLog = { blockPresses: 0, keys: [], unregistered: 0, registrations: [] };
 // 2.x shape: Experiments resolve through logseq.sdk.experiments; the host reads opts fields by name.
 window.logseq = { api: {}, sdk: { experiments: {
-  register_fenced_code_renderer(pid, lang, opts) { log.registrations.push({ pid, lang, keys: Object.keys(opts) }); fenced.set(lang, opts); return () => log.unregistered++; },
-  register_block_renderer(pid, key, opts) { log.registrations.push({ pid, key, keys: Object.keys(opts) }); blocks.set(key, opts); return () => log.unregistered++; }
+  register_fenced_code_renderer(pid, lang, opts) { log.registrations.push({ pid, lang, keys: Object.keys(opts) }); fenced.set(lang, opts); return () => log.unregistered++; }
 } } };
 document.addEventListener("keydown", event => log.keys.push(event.key));
 let root;
@@ -90,12 +89,11 @@ window.hostMount = () => {
   document.querySelector("#graph").replaceChildren(block); root = createRoot(block);
 };
 window.hostRender = (kind, props) => flushSync(() => {
-  if (kind === "fenced") {
-    const opts = fenced.get(props.lang);
-    root.render(React.createElement(HostFence, { opts, content: props.content, preview: props.preview }));
-  } else root.render(React.createElement(blocks.get("cogitatum-code").render, props));
+  const opts = fenced.get(props.lang);
+  // "bare" renders the result without the fenced-code wrapper, as a host with changed controls would.
+  if (kind === "bare") root.render(React.createElement(opts.render, { content: props.content }));
+  else root.render(React.createElement(HostFence, { opts, content: props.content, preview: props.preview }));
 });
-window.hostMatches = props => blocks.get("cogitatum-code").when(props);
 window.hostUnmount = () => flushSync(() => root.unmount());
 // Minimal parent side of the installed SDK's Postmate transport. The plugin performs its own
 // ready(), metadata call, provideStyle() and beforeunload; no plugin methods are patched.
@@ -169,7 +167,7 @@ try {
     return route.fulfill({ contentType: `${file[0]}; charset=utf-8`, body: file[1] });
   });
   await page.goto("http://logseq.test/host.html");
-  await page.waitForFunction(() => window.hostLog.registrations.length === 3 && document.querySelector('style[data-key="cogitatum-reading"]'));
+  await page.waitForFunction(() => window.hostLog.registrations.length === 2 && document.querySelector('style[data-key="cogitatum-reading"]'));
   const frames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
   // The shipped HTML and main entry complete ready() through the bundled SDK.
@@ -178,8 +176,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.hostLog.sdkMetadata), { version: manifest.devDependencies["@logseq/libs"], runtime: "js" });
   assert.deepEqual(await page.evaluate(() => window.hostLog.registrations), [
     { pid: "cogitatum", lang: "cog", keys: ["render"] },
-    { pid: "cogitatum", lang: "cogitatum", keys: ["render"] },
-    { pid: "cogitatum", key: "cogitatum-code", keys: ["when", "render"] }
+    { pid: "cogitatum", lang: "cogitatum", keys: ["render"] }
   ]);
   assert.equal(await page.locator('style[data-key="cogitatum-reading"]').count(), 1);
 
@@ -492,16 +489,14 @@ try {
   // The host's own toggle is a block press; later checks count only presses through the preview.
   await page.evaluate(() => { window.hostUnmount(); window.hostLog.blockPresses = 0; });
 
-  // DB code block: the host-side predicate matches only Cogitatum code blocks.
-  const props = lang => ({ blockId: "b1", uuid: "b1", content: "- [C] From a DB code block.", properties: { "logseq.property.node/display-type": "code", "logseq.property.code/lang": lang } });
-  assert.deepEqual(await page.evaluate(([cog, js]) => [window.hostMatches(cog), window.hostMatches(js)], [props("cog"), props("js")]), [true, false]);
-  await page.evaluate(([value]) => { window.hostMount(); window.hostRender("block", value); }, [props("cog")]);
+  // Without the host's fenced-code controls, Edit points to the native action instead of failing silently.
+  await page.evaluate(() => { window.hostMount(); window.hostRender("bare", { lang: "cog", content: "- [C] Without host controls." }); });
   await rows.first().waitFor();
-  assert.equal(await rows.first().locator(".cog-reading-text").textContent(), "From a DB code block.");
+  assert.equal(await rows.first().locator(".cog-reading-text").textContent(), "Without host controls.");
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   assert.match(await page.getByRole('status').textContent(), /native Edit action/);
   // A host contract violation shows a plain error panel instead of throwing into the host renderer.
-  await page.evaluate(([value]) => window.hostRender("block", { ...value, content: 42 }), [props("cog")]);
+  await page.evaluate(() => window.hostRender("bare", { lang: "cog", content: 42 }));
   assert.match(await page.locator('.cog-block-error[role="alert"]').textContent(), /^Could not render this block: /);
   assert.equal(await page.locator(".cog-block-body").isHidden(), true);
   await page.evaluate(() => window.hostUnmount());
@@ -620,7 +615,7 @@ try {
 
   // Unload releases each returned unregister function exactly once.
   await page.evaluate(async () => { await window.pluginUnload(); await window.pluginUnload(); });
-  assert.equal(await page.evaluate(() => window.hostLog.unregistered), 3);
+  assert.equal(await page.evaluate(() => window.hostLog.unregistered), 2);
 
   // Highlighting against the CodeMirror 5 release Logseq 0.10 bundles, not the stand-in.
   const assist = (await build({ bundle: true, write: false, format: "iife", platform: "browser", globalName: "Assist", logLevel: "silent",
