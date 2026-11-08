@@ -7,7 +7,7 @@ declare const __COGITATUM_LOGO__: string;
 export type CogBlock = { update(content: string): void; destroy(): void };
 
 export function mountCogBlock(container: HTMLElement, content: string): CogBlock {
-  const editor = createSourceEditor(container);
+  const editor = createSourceEditor(container, line => block.reveal(line));
   const block = createBlockView(container, {
     onEdit: editor.edit,
     logo: __COGITATUM_LOGO__,

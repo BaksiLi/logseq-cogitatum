@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@logseq/libs": "0.3.4",
+    "codemirror": "5.65.13",
     "esbuild": "^0.28.2",
     "playwright": "1.61.1",
     "react": "19.2.6",
@@ -34,10 +35,10 @@
   "icon": "assets/cog-plugin-icon.png",
   "cogitatumSource": {
     "repository": "BaksiLi/cogitatum",
-    "ref": "c5761459023926e0b73c04897eb98b220d576aa7",
+    "ref": "ab13d6ea870de3fc142f3ae3810e63b39a8ec7a0",
     "sha256": {
-      "core": "84c9cd315ef18199fee27877d326d631c09efe47d411e325e71da5741c79f52a",
-      "view": "ad8dc19f284a7a054701c79d55edc51e2ced034c93517ea2241bfb2e029a93c2"
+      "core": "789d03b0c3929a1edafa631976600ea3ef8ba47d7f400bcc8b8477cd5913a31f",
+      "view": "b329fd7cb9f8e5ea55aa694675bda4231d782a1cc3571b1ab79d7e89e88fbed1"
     }
   },
   "engines": {

@@ -1,6 +1,7 @@
 import type { BlockEditRequest } from "@cogitatum/view/block";
+import { assistEditor, type AssistedEditor } from "./assist.js";
 
-type NativeEditor = {
+type NativeEditor = AssistedEditor & {
   getValue(): string;
   getOption(name: "lineWrapping"): boolean;
   setOption(name: "lineWrapping", value: boolean): void;
@@ -9,15 +10,20 @@ type NativeEditor = {
   setSelection(from: { line: number; ch: number }, to: { line: number; ch: number }): void;
 };
 
-/** Logseq's fenced renderer exposes only content, so reuse its existing editor and toggle. */
-export function createSourceEditor(container: HTMLElement) {
-  let parallel: { wrap: HTMLElement; editor: NativeEditor; original: boolean } | undefined;
+/**
+ * Logseq's fenced renderer exposes only content, so reuse its existing editor and toggle.
+ * While editing beside the preview, the editor wraps, is highlighted, and leads the preview with its cursor;
+ * all three are released together.
+ */
+export function createSourceEditor(container: HTMLElement, onCursor: (line: number) => void) {
+  let parallel: { wrap: HTMLElement; editor: NativeEditor; original: boolean; release?: () => void } | undefined;
   function restoreParallelEditing() {
     if (!parallel) return;
     const previous = parallel;
     parallel = undefined;
     // React may detach the preview before cleanup while its host fence remains mounted.
     delete previous.wrap.dataset.cogEditing;
+    previous.release?.();
     previous.editor.setOption("lineWrapping", previous.original);
   }
   return {
@@ -52,6 +58,8 @@ export function createSourceEditor(container: HTMLElement) {
         if (!validateTarget()) return;
         parallel = { wrap, editor, original };
         editor.setOption("lineWrapping", true);
+        if (!validateTarget()) return;
+        parallel.release = assistEditor(editor, onCursor);
         if (!validateTarget()) return;
       }
       wrap.dataset.cogEditing = "true";

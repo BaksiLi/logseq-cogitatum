@@ -22,3 +22,8 @@
 .ui-fenced-code-wrap[data-cog-editing] > .ui-fenced-code-editor,
 .ui-fenced-code-wrap[data-cog-editing] > .ui-fenced-code-result { min-width: 0; }
 .ui-fenced-code-wrap[data-cog-editing] > .ui-fenced-code-result { padding-top: 0; }
+/* Source fences beside a preview: Core's token kinds take the theme's syntax classes; roles take the Map's stance colors. */
+.CodeMirror .cog-token.cog-role-G { color: #357873; }
+.CodeMirror .cog-token.cog-role-O { color: #a8553d; }
+.CodeMirror .cog-token-retired { text-decoration: line-through; }
+.CodeMirror .cog-token-note { font-style: italic; }

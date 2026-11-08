@@ -93,7 +93,9 @@ Both APIs are experimental and may change; Marketplace compatibility and publica
 The fence renderer supplies text without block identity.
 `src/edit.ts` isolates the bridge to the existing fenced-code toggle and CodeMirror instance.
 Changed or missing host controls produce an explicit message directing the user to native Edit.
-The adapter temporarily enables line wrapping and restores it on preview cleanup, including when the host retains its native editor.
+While editing beside the preview, the adapter also enables line wrapping, colors the source with Core's lexical tokens through CodeMirror's theme classes, and lets the cursor select that line's occurrence in the preview.
+It releases all three on preview cleanup, including when the host retains its native editor.
+The browser harness checks highlighting against CodeMirror 5.65.13, the release Logseq 0.10 bundles; it has not yet been checked inside installed Logseq.
 Presses consumed by Reading stay inside it so Logseq does not enter block editing; unrelated host shortcuts remain host-owned.
 
 Unit tests exercise registration, API detection and unload.

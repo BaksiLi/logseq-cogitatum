@@ -35,7 +35,12 @@ window.logseq = { api: {}, sdk: { experiments: {
 } } };
 document.addEventListener("keydown", event => log.keys.push(event.key));
 let root;
-window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [], focuses: 0, actions: [] };
+window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [], focuses: 0, actions: [], marks: 0 };
+window.nativeCursor = line => {
+  const node = document.querySelector(".CodeMirror");
+  node.cogCursor = { line, ch: 0 };
+  for (const { event, handler } of node.cogHandlers ?? []) if (event === "cursorActivity") handler();
+};
 function HostFence({ opts, content, preview = true }) {
   const [value, setValue] = React.useState(content), [active, setActive] = React.useState(false);
   React.useEffect(() => setValue(content), [content]);
@@ -44,6 +49,12 @@ function HostFence({ opts, content, preview = true }) {
   return React.createElement("div", { className: "ui-fenced-code-wrap" + (active ? " is-active" : "") },
     React.createElement("div", { className: "ui-fenced-code-editor" }, React.createElement("div", { className: "CodeMirror", ref: node => {
       if (node && !node.CodeMirror) node.CodeMirror = {
+        // Highlighting and following: live marks and handlers are counted so cleanup can be checked.
+        getCursor: () => node.cogCursor ?? { line: 0, ch: 0 },
+        markText() { window.nativeEditorLog.marks++; let live = true; return { clear() { if (live) { live = false; window.nativeEditorLog.marks--; } } }; },
+        operation: work => work(),
+        on(event, handler) { (node.cogHandlers ??= new Set()).add({ event, handler }); },
+        off(event, handler) { for (const entry of node.cogHandlers ?? []) if (entry.event === event && entry.handler === handler) node.cogHandlers.delete(entry); },
         getOption() {
           const value = wrapping.current;
           window.nativeEditorLog.actions.push('getOption'); window.onNativeEditorAction?.('getOption', node);
@@ -382,7 +393,7 @@ try {
     for (const invalidation of ['abort', 'stale', 'source', 'editor']) {
       await page.evaluate(content => {
         window.hostMount(); window.hostRender('fenced', { lang: 'cog', content });
-        window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [], focuses: 0, actions: [] };
+        window.nativeEditorLog = { toggles: 0, selections: [], wrapping: [], focuses: 0, actions: [], marks: 0 };
       }, callbackSource);
       await rows.last().waitFor();
       await page.locator('.cog-reading-row[data-line="2"]').click();
@@ -435,7 +446,14 @@ try {
     from: { line: 1, ch: 4 },
     to: { line: 2, ch: "    Continued wording.".length }
   });
+  // Editing beside the preview highlights the native editor, and its cursor leads the preview.
+  assert.ok(await page.evaluate(() => window.nativeEditorLog.marks) > 0, "The native editor is highlighted while editing beside the preview");
+  await page.evaluate(() => window.nativeCursor(0));
+  assert.equal(await page.locator('.cog-reading-row[data-line="1"]').getAttribute("data-selected"), "true", "The preview follows the native cursor");
+  assert.equal(await page.getByRole("textbox", { name: "Native source" }).evaluate(element => document.activeElement === element), true, "Following never takes focus");
   await page.evaluate(() => window.hostUnmount());
+  assert.deepEqual(await page.evaluate(() => ({ marks: window.nativeEditorLog.marks, handlers: document.querySelector(".CodeMirror")?.cogHandlers?.size ?? 0 })),
+    { marks: 0, handlers: 0 }, "Unmount releases highlighting and cursor following with wrapping");
 
   // DB code block: the host-side predicate matches only Cogitatum code blocks.
   const props = lang => ({ blockId: "b1", uuid: "b1", content: "- [C] From a DB code block.", properties: { "logseq.property.node/display-type": "code", "logseq.property.code/lang": lang } });
@@ -567,8 +585,37 @@ try {
   await page.evaluate(async () => { await window.pluginUnload(); await window.pluginUnload(); });
   assert.equal(await page.evaluate(() => window.hostLog.unregistered), 3);
 
+  // Highlighting against the CodeMirror 5 release Logseq 0.10 bundles, not the stand-in.
+  const assist = (await build({ bundle: true, write: false, format: "iife", platform: "browser", globalName: "Assist", logLevel: "silent",
+    entryPoints: [fileURLToPath(new URL("../src/assist.ts", import.meta.url))] })).outputFiles[0].text;
+  const cm5 = await browser.newPage();
+  await cm5.setContent(`<!doctype html><style>${readFileSync(new URL("../node_modules/codemirror/lib/codemirror.css", import.meta.url), "utf8")}</style><div id="editor"></div>`);
+  await cm5.addScriptTag({ path: fileURLToPath(new URL("../node_modules/codemirror/lib/codemirror.js", import.meta.url)) });
+  await cm5.addScriptTag({ content: assist });
+  const real = await cm5.evaluate(() => {
+    const editor = window.CodeMirror(document.querySelector("#editor"), { value: "- [C @nine] 9 不是素數 `code`。\n  - [O/ use @nine] 但。" });
+    const lines = [];
+    const release = window.Assist.assistEditor(editor, line => lines.push(line));
+    const painted = () => [...document.querySelectorAll(".cog-token")].map(node => `${node.className.trim().replace(/^cog-token /, "")}=${node.textContent}`);
+    const first = painted();
+    editor.replaceRange("\n  - [G] 新。", { line: 1, ch: editor.getLine(1).length });
+    const edited = painted().filter(token => token.endsWith("=G")).length;
+    editor.setCursor({ line: 2, ch: 3 });
+    release();
+    editor.setCursor({ line: 0, ch: 0 });
+    return { first, edited, lines, released: painted().length, version: window.CodeMirror.version };
+  });
+  assert.equal(real.version, "5.65.13");
+  assert.deepEqual(real.first.slice(0, 5), ["cog-token-bullet cm-punctuation=- ", "cog-token-mark cm-keyword=[", "cog-token-role cm-tag cog-role-C=C",
+    "cog-token-name cm-property=@nine", "cog-token-mark cm-keyword=]"]);
+  assert.ok(real.first.includes("cog-token-code cm-string=`code`") && real.first.includes("cog-token-role cm-tag cog-role-O=O/"));
+  assert.equal(real.edited, 1, "Edits are rehighlighted");
+  assert.deepEqual(real.lines, [3], "The cursor reports one-based lines until released");
+  assert.equal(real.released, 0, "Release clears every mark");
+  await cm5.close();
+
   assert.deepEqual(errors, []);
-  process.stdout.write("Logseq shipped-artifact host harness passed: exact diagnostic Source and expanded native navigation; 16 simulated getOption/setOption/refresh/selection callback invalidations; registration, Reading/Map/Strands, local-use selection, source revision, native cleanup, pointer, narrow view and SDK unload.\n");
+  process.stdout.write("Logseq shipped-artifact host harness passed: exact diagnostic Source and expanded native navigation; 16 simulated getOption/setOption/refresh/selection callback invalidations; registration, Reading/Map/Strands, native highlighting and cursor following (also against real CodeMirror 5.65.13), local-use selection, source revision, native cleanup, pointer, narrow view and SDK unload.\n");
   process.stdout.write(`dist/main.js SHA-256 ${artifactHash}\n`);
 } finally {
   await browser.close();
