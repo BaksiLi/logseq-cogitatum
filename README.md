@@ -23,7 +23,7 @@ npm run release
 ```
 
 `release` runs source checks, unit tests, a production build and the browser harness.
-It creates `releases/cogitatum-logseq-0.1.0-alpha.4.zip` with `index.html`, `main.js`, `package.json`, `cog-plugin-icon.png` and `LICENSE` at its root.
+It creates `releases/cogitatum-logseq-0.1.0-alpha.5.zip` with `index.html`, `main.js`, `package.json`, `cog-plugin-icon.png` and `LICENSE` at its root.
 The same five files in `dist/` form a portable unpacked plugin; no development dependencies are needed at runtime.
 In Logseq Developer mode, open Plugins, load the unpacked `dist/` directory and reload Cogitatum after replacing its files.
 Logseq records that directory by absolute path; after moving the checkout, load it again.
@@ -34,7 +34,7 @@ Alpha builds are GitHub pre-releases of `BaksiLi/logseq-cogitatum` tagged `v<ver
 Pushing such a tag runs the release workflow, which repeats `npm run release` and attaches the ZIP.
 The plugin is not yet in the Logseq marketplace, which installs only a non-prerelease ZIP.
 
-The adapter version is `0.1.0-alpha.4`; Core and View are `0.6.2`; Format remains `0.6.0`.
+The adapter version is `0.1.0-alpha.5`; Core and View are `0.6.2`; Format remains `0.6.0`.
 Core and View are vendored from the reviewed public source commit recorded in `package.json`; no registry lookup is needed to build.
 This adopts the same shared rendering and interaction implementation used by the Playground.
 `package.json` records the full reviewed public source commit and both vendored archive SHA-256 digests.
