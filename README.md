@@ -16,13 +16,14 @@ npm ci
 npm run check
 npm test
 npm exec -- playwright install chromium
-npm run package
+npm run release
 ```
 
-`package` runs source checks, unit tests, a production build and the browser harness.
-It creates `dist/cogitatum-logseq-0.1.0-alpha.4.zip` with `index.html`, `main.js`, `package.json`, `cog-plugin-icon.png` and `LICENSE` at its root.
+`release` runs source checks, unit tests, a production build and the browser harness.
+It creates `releases/cogitatum-logseq-0.1.0-alpha.4.zip` with `index.html`, `main.js`, `package.json`, `cog-plugin-icon.png` and `LICENSE` at its root.
 The same five files in `dist/` form a portable unpacked plugin; no development dependencies are needed at runtime.
 In Logseq Developer mode, open Plugins, load the unpacked `dist/` directory and reload Cogitatum after replacing its files.
+Logseq records that directory by absolute path; after moving the checkout, load it again.
 If an existing block still shows an older build, leave and reopen its page to remount it.
 These commands do not install or publish the plugin.
 
@@ -31,6 +32,8 @@ Core and View are vendored from the reviewed public source commit recorded in `p
 This adopts the same shared rendering and interaction implementation used by the Playground.
 `package.json` records the full reviewed public source commit and both vendored archive SHA-256 digests.
 Checks validate those archives and the installed lockfile integrity, so unchanged package versions cannot silently select a different source build.
+To move the pin, run `node scripts/vendor-hosts.mjs <commit> <this checkout>` from a public checkout with matching dependencies.
+It packs that commit in isolation, so rerunning it on the pinned commit reproduces the recorded digests; `pin.mjs` is its verifier.
 Commit before the final production build: the information disclosure shows the public pin and clean adapter revision.
 Source archives without their own Git root report `source archive`, including when extracted inside another checkout.
 Retain the ZIP digest to identify the exact tested artifact.
@@ -77,10 +80,10 @@ To sync newly approved designer exports, set the source directory and copy both 
 COG_BRAND_DIR=/path/to/approved/brand
 cp "$COG_BRAND_DIR/cog-mark.svg" assets/cog-mark.svg
 cp "$COG_BRAND_DIR/cog-plugin-icon.png" assets/cog-plugin-icon.png
-npm run package
+npm run release
 ```
 
-Commit the assets with any integration changes, then run `npm run package` again to identify the clean host revision in the final artifact.
+Commit the assets with any integration changes, then run `npm run release` again to identify the clean host revision in the final artifact.
 
 ## Compatibility and verification
 

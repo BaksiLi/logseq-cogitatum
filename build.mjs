@@ -9,6 +9,8 @@ import { buildDefine, manifest } from "./build-metadata.mjs";
 // Logseq loads package.json's top-level `main` (an HTML page) in a plugin iframe; styles are injected into the host
 // with provideStyle, so the bundle carries the view CSS as text instead of shipping a stylesheet.
 if (manifest.main !== "dist/index.html" || manifest.logseq?.main) throw new Error("Logseq requires the top-level main entry to point to dist/index.html.");
+// Rebuild from empty: dist/ is the unpacked plugin Logseq loads, so leftovers would ship with it.
+rmSync("dist", { recursive: true, force: true });
 mkdirSync("dist", { recursive: true });
 copyFileSync("index.html", "dist/index.html");
 await build({
@@ -31,11 +33,12 @@ copyFileSync(icon, `dist/${pluginIcon}`);
 writeFileSync("dist/package.json", JSON.stringify({ name, version, description, license, homepage, main: "index.html", icon: pluginIcon, logseq }, null, 2) + "\n");
 copyFileSync("LICENSE", "dist/LICENSE");
 if (process.argv.includes("--zip")) {
-  const path = `dist/${name.replace(/^@/, "").replace("/", "-")}-${version}.zip`;
+  const path = `releases/${name.replace(/^@/, "").replace("/", "-")}-${version}.zip`;
   const root = fileURLToPath(new URL("./", import.meta.url));
   const output = join(root, path);
   const stage = mkdtempSync(join(tmpdir(), "cogitatum-logseq-release-"));
   try {
+    mkdirSync(join(root, "releases"), { recursive: true });
     const timestamp = new Date("1980-01-01T00:00:00Z");
     const files = ["index.html", "main.js", "package.json", pluginIcon, "LICENSE"];
     for (const file of files) {

@@ -5,8 +5,8 @@
   - [C] Connection pool exhaustion caused the timeouts.
     - [G @acq-fail; @report-step] Between 02:00 and 03:00 the service logged repeated connection-acquisition failures.
 - Planning the fix a week later:
-  - [Q] What should change before the next release?
-    - [C answers ^] Doubling the pool size will prevent these timeouts.
+  - [Q @release] What should change before the next release?
+    - [C answers @release] Doubling the pool size will prevent these timeouts.
       - We reuse the same logged failures; they are not a second observation.
       - [G use @acq-fail] The logs show the pool is too small.
         - [O] The log export may use UTC, so those failures may not fall between 02:00 and 03:00 local time.

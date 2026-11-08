@@ -9,7 +9,7 @@
   "scripts": {
     "check": "node build-metadata.mjs && tsc --noEmit",
     "build": "node build.mjs",
-    "package": "npm run check && npm test && node build.mjs --production --zip && npm run test:browser",
+    "release": "npm run check && npm test && node build.mjs --production --zip && npm run test:browser",
     "test:browser": "node tests/host.browser.mjs",
     "test": "vitest run src"
   },

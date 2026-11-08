@@ -37,11 +37,11 @@ jobs:
         run: npm exec --no -- playwright install --with-deps chromium
       - name: Verify and package release
         if: matrix.node == 24
-        run: npm run package
+        run: npm run release
       - uses: actions/upload-artifact@v7
         if: matrix.node == 24
         with:
           name: logseq-cogitatum-${{ github.sha }}
-          path: dist/*.zip
+          path: releases/*.zip
           if-no-files-found: error
           compression-level: 0
