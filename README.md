@@ -5,6 +5,8 @@
 This standalone alpha renders explicit `cog` and `cogitatum` code blocks with the shared Cogitatum Reading, Map and Strands.
 It does not infer structure from ordinary outline blocks.
 Logseq owns source editing, input methods, undo and saving; the adapter never writes graph contents.
+While the code editor is open beside the preview, undo and redo keys reach only that editor's own history:
+Logseq 0.10 also handles them on its window, which pops its graph history and can navigate to another page.
 
 ## Build and install
 

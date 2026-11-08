@@ -1,10 +1,11 @@
 import { tokenizeSource, type SourceTokenKind } from "@cogitatum/core";
 
 type Position = { line: number; ch: number };
-/** The CodeMirror 5 calls Logseq's fence editor needs for highlighting and following. */
+/** The CodeMirror 5 calls Logseq's fence editor needs for highlighting, following and keeping its own history. */
 export type AssistedEditor = {
   getValue(): string;
   getCursor(): Position;
+  getWrapperElement(): HTMLElement;
   markText(from: Position, to: Position, options: { className: string }): { clear(): void };
   operation<T>(work: () => T): T;
   on(event: "changes" | "cursorActivity", handler: () => void): void;
@@ -20,6 +21,10 @@ const HOST_CLASSES: Record<SourceTokenKind, string> = {
 /**
  * Color the fence editor's source and report the cursor's one-based line while the author edits beside the preview.
  * The editor holds only the fence's content, so Core's document-mode lines are its lines. Returns the release.
+ *
+ * Logseq 0.10 binds undo and redo on its window, even for keys typed in its code editor. CodeMirror has already
+ * undone the edit by then, and the host would also pop its graph history, which saves this editor only on blur,
+ * and navigate to the page its last transaction was made on. Inside this buffer, history keys stop at the editor.
  */
 export function assistEditor(editor: AssistedEditor, onCursor: (line: number) => void): () => void {
   let marks: Array<{ clear(): void }> = [];
@@ -39,12 +44,18 @@ export function assistEditor(editor: AssistedEditor, onCursor: (line: number) =>
     });
   });
   const follow = () => onCursor(editor.getCursor().line + 1);
+  const keepHistory = (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && /^[zy]$/i.test(event.key)) event.stopPropagation();
+  };
+  const wrapper = editor.getWrapperElement();
   highlight();
   editor.on("changes", highlight);
   editor.on("cursorActivity", follow);
+  wrapper.addEventListener("keydown", keepHistory);
   return () => {
     editor.off("changes", highlight);
     editor.off("cursorActivity", follow);
+    wrapper.removeEventListener("keydown", keepHistory);
     editor.operation(clear);
   };
 }

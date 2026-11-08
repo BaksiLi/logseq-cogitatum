@@ -57,6 +57,7 @@ function HostFence({ opts, content, preview = true }) {
           return { line: before.length - 1, ch: before.at(-1).length };
         },
         markText() { window.nativeEditorLog.marks++; let live = true; return { clear() { if (live) { live = false; window.nativeEditorLog.marks--; } } }; },
+        getWrapperElement: () => node,
         operation: work => work(),
         on(event, handler) { (node.cogHandlers ??= new Set()).add({ event, handler }); },
         off(event, handler) { for (const entry of node.cogHandlers ?? []) if (entry.event === event && entry.handler === handler) node.cogHandlers.delete(entry); },
@@ -648,6 +649,26 @@ try {
   assert.equal(real.edited, 1, "Edits are rehighlighted");
   assert.deepEqual(real.lines, [3], "The cursor reports one-based lines until released");
   assert.equal(real.released, 0, "Release clears every mark");
+
+  // Logseq binds undo on its window; inside an assisted editor the key must reach only CodeMirror's history.
+  const history = async assisted => {
+    await cm5.evaluate(assisted => {
+      document.querySelector("#editor").replaceChildren();
+      const editor = window.history5 = window.CodeMirror(document.querySelector("#editor"), { value: "- [C] 九。" });
+      window.hostUndo = 0;
+      window.onkeydown = event => { if (event.key.toLowerCase() === "z") window.hostUndo++; };
+      window.releaseHistory = assisted ? window.Assist.assistEditor(editor, () => {}) : () => {};
+      editor.focus(); editor.setCursor({ line: 0, ch: editor.getLine(0).length });
+    }, assisted);
+    await cm5.keyboard.type("延長");
+    await cm5.keyboard.press("Meta+z");
+    return cm5.evaluate(() => ({ value: window.history5.getValue(), host: window.hostUndo }));
+  };
+  assert.deepEqual(await history(false), { value: "- [C] 九。", host: 1 }, "Unassisted, both histories receive the key");
+  assert.deepEqual(await history(true), { value: "- [C] 九。", host: 0 }, "Assisted, only CodeMirror undoes");
+  await cm5.evaluate(() => { window.releaseHistory(); window.history5.focus(); });
+  await cm5.keyboard.press("Meta+z");
+  assert.equal(await cm5.evaluate(() => window.hostUndo), 1, "Release returns the key to the host");
   await cm5.close();
 
   assert.deepEqual(errors, []);
