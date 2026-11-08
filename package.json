@@ -18,8 +18,8 @@
     "title": "Cogitatum"
   },
   "dependencies": {
-    "@cogitatum/core": "file:vendor/cogitatum-core-0.6.1.tgz",
-    "@cogitatum/view": "file:vendor/cogitatum-view-0.6.1.tgz"
+    "@cogitatum/core": "file:vendor/cogitatum-core-0.6.2.tgz",
+    "@cogitatum/view": "file:vendor/cogitatum-view-0.6.2.tgz"
   },
   "devDependencies": {
     "@logseq/libs": "0.3.4",
@@ -35,10 +35,10 @@
   "icon": "assets/cog-plugin-icon.png",
   "cogitatumSource": {
     "repository": "BaksiLi/cogitatum",
-    "ref": "d28746e562779916dff40e658bd17b318599dc5b",
+    "ref": "a55b7d53fc1b6bb1df3ec6005078378ea8a444e5",
     "sha256": {
-      "core": "200073119d27dfff14a92d0a9a5f96113abb61413801509e5c0026ac49e912bb",
-      "view": "cb3651a7a43ba83052e16836614b513ac11b78bd6002cd09ccdf76fd760406dd"
+      "core": "1d5787ea36f69eca390be1581e9b36682eeb6afbc80f74cd6e7e1602feac3865",
+      "view": "698cb138dd63b870ac83ae40f05e3b4fdc888660286e12ddd90ebc69eaf2b637"
     }
   },
   "engines": {

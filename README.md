@@ -29,7 +29,11 @@ Logseq records that directory by absolute path; after moving the checkout, load 
 If an existing block still shows an older build, leave and reopen its page to remount it.
 These commands do not install or publish the plugin.
 
-The adapter version is `0.1.0-alpha.4`; Core and View are `0.6.1`; Format remains `0.6.0`.
+Alpha builds are GitHub pre-releases of `BaksiLi/logseq-cogitatum` tagged `v<version>`; extract a release ZIP and load that directory the same way.
+Pushing such a tag runs the release workflow, which repeats `npm run release` and attaches the ZIP.
+The plugin is not yet in the Logseq marketplace, which installs only a non-prerelease ZIP.
+
+The adapter version is `0.1.0-alpha.4`; Core and View are `0.6.2`; Format remains `0.6.0`.
 Core and View are vendored from the reviewed public source commit recorded in `package.json`; no registry lookup is needed to build.
 This adopts the same shared rendering and interaction implementation used by the Playground.
 `package.json` records the full reviewed public source commit and both vendored archive SHA-256 digests.
