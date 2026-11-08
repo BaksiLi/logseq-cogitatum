@@ -22,7 +22,12 @@ export function mountCogBlock(container: HTMLElement, content: string): CogBlock
   block.element.addEventListener("keydown", event => { if (event.defaultPrevented) event.stopPropagation(); }, on);
   block.update(content);
   return {
-    update: block.update,
+    update(next) {
+      block.update(next);
+      // A revision clears semantic selection; the author's cursor is a source position and survives it.
+      const line = editor.cursorLine(next);
+      if (line) block.reveal(line);
+    },
     destroy() {
       abort.abort(); block.destroy();
       editor.destroy();

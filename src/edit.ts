@@ -17,6 +17,7 @@ type NativeEditor = AssistedEditor & {
  */
 export function createSourceEditor(container: HTMLElement, onCursor: (line: number) => void) {
   let parallel: { wrap: HTMLElement; editor: NativeEditor; original: boolean; release?: () => void } | undefined;
+  const normal = (text: string) => text.replace(/\r\n/g, "\n").replace(/\n$/, "");
   function restoreParallelEditing() {
     if (!parallel) return;
     const previous = parallel;
@@ -27,6 +28,11 @@ export function createSourceEditor(container: HTMLElement, onCursor: (line: numb
     previous.editor.setOption("lineWrapping", previous.original);
   }
   return {
+    /** The one-based cursor line, while editing beside the preview and only if the editor holds `source`. */
+    cursorLine(source: string): number | undefined {
+      if (!parallel?.wrap.classList.contains("is-active") || normal(parallel.editor.getValue()) !== normal(source)) return;
+      return parallel.editor.getCursor().line + 1;
+    },
     async edit({ source, sourceSpan: span, signal }: BlockEditRequest): Promise<void> {
       if (signal.aborted || !container.isConnected) return;
       const wrap = container.closest<HTMLElement>(".ui-fenced-code-wrap");
@@ -40,7 +46,6 @@ export function createSourceEditor(container: HTMLElement, onCursor: (line: numb
       const native = wrap.querySelector(".CodeMirror") as (HTMLElement & { CodeMirror?: NativeEditor }) | null;
       const editor = native?.CodeMirror;
       if (!editor) throw new Error("Logseq could not open its code editor. Use the block's native Edit action.");
-      const normal = (text: string) => text.replace(/\r\n/g, "\n").replace(/\n$/, "");
       const validateTarget = () => {
         if (signal.aborted || !container.isConnected) return false;
         if (container.closest(".ui-fenced-code-wrap") !== wrap || !wrap.classList.contains("is-active")

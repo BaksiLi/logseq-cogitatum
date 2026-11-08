@@ -50,7 +50,12 @@ function HostFence({ opts, content, preview = true }) {
     React.createElement("div", { className: "ui-fenced-code-editor" }, React.createElement("div", { className: "CodeMirror", ref: node => {
       if (node && !node.CodeMirror) node.CodeMirror = {
         // Highlighting and following: live marks and handlers are counted so cleanup can be checked.
-        getCursor: () => node.cogCursor ?? { line: 0, ch: 0 },
+        // An explicit test cursor wins; otherwise the textarea caret stands in for CodeMirror's.
+        getCursor: () => {
+          if (node.cogCursor) return node.cogCursor;
+          const before = input.current.value.slice(0, input.current.selectionEnd).split("\\n");
+          return { line: before.length - 1, ch: before.at(-1).length };
+        },
         markText() { window.nativeEditorLog.marks++; let live = true; return { clear() { if (live) { live = false; window.nativeEditorLog.marks--; } } }; },
         operation: work => work(),
         on(event, handler) { (node.cogHandlers ??= new Set()).add({ event, handler }); },
@@ -451,6 +456,11 @@ try {
   await page.evaluate(() => window.nativeCursor(0));
   assert.equal(await page.locator('.cog-reading-row[data-line="1"]').getAttribute("data-selected"), "true", "The preview follows the native cursor");
   assert.equal(await page.getByRole("textbox", { name: "Native source" }).evaluate(element => document.activeElement === element), true, "Following never takes focus");
+  // Typing moves the cursor before the host delivers the revision; the revised preview must still follow it.
+  const typed = multilineSource.replace("\n", " Typed.\n");
+  await page.evaluate(source => { window.nativeCursor(0); window.hostEdit(source); }, typed);
+  assert.match(await page.locator('.cog-reading-row[data-line="1"]').textContent(), /Typed\./);
+  assert.equal(await page.locator('.cog-reading-row[data-line="1"]').getAttribute("data-selected"), "true", "A revision keeps following the native cursor");
   await page.evaluate(() => window.hostUnmount());
   assert.deepEqual(await page.evaluate(() => ({ marks: window.nativeEditorLog.marks, handlers: document.querySelector(".CodeMirror")?.cogHandlers?.size ?? 0 })),
     { marks: 0, handlers: 0 }, "Unmount releases highlighting and cursor following with wrapping");

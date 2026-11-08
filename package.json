@@ -35,10 +35,10 @@
   "icon": "assets/cog-plugin-icon.png",
   "cogitatumSource": {
     "repository": "BaksiLi/cogitatum",
-    "ref": "ab13d6ea870de3fc142f3ae3810e63b39a8ec7a0",
+    "ref": "d28746e562779916dff40e658bd17b318599dc5b",
     "sha256": {
-      "core": "789d03b0c3929a1edafa631976600ea3ef8ba47d7f400bcc8b8477cd5913a31f",
-      "view": "b329fd7cb9f8e5ea55aa694675bda4231d782a1cc3571b1ab79d7e89e88fbed1"
+      "core": "200073119d27dfff14a92d0a9a5f96113abb61413801509e5c0026ac49e912bb",
+      "view": "cb3651a7a43ba83052e16836614b513ac11b78bd6002cd09ccdf76fd760406dd"
     }
   },
   "engines": {
